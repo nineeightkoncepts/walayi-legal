@@ -13,15 +13,25 @@ import {
   onAuthStateChanged,
   User 
 } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { initializeFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize Firebase App
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firestore with custom database ID
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// Initialize Firestore with custom database ID.
+// Firestore's default streaming (WebChannel) connection gets silently
+// blocked by some ad-blockers/privacy extensions — the request just dies
+// with net::ERR_BLOCKED_BY_CLIENT and every onSnapshot listener goes dead
+// with no error surfaced anywhere. autoDetectLongPolling falls back to
+// plain long-polling HTTP requests when that happens, which don't get
+// pattern-matched the same way. This is the real-time sync every live
+// feature in this app depends on (incoming calls, presence, commissioner
+// directory), so it needs to survive a blocked streaming channel.
+export const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true
+}, firebaseConfig.firestoreDatabaseId);
 
 // Initialize Storage
 export const storage = getStorage(app);
