@@ -1,0 +1,6 @@
+{
+  "name": "WALAYI — Digital Oath & Commissioning Platform",
+  "description": "Ugandan legal infrastructure for digital oaths, affidavits commissioning, notarial services, and legal document verification.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

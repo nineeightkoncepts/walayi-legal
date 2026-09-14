@@ -1,0 +1,17 @@
+<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100" height="100" rx="22" fill="#0D1B3D"/>
+
+  <!-- Balance scale: classic legal / oath motif in WALAYI navy + teal -->
+  <g stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="50" y1="27" x2="50" y2="70"/>
+    <line x1="26" y1="35" x2="74" y2="35"/>
+    <line x1="28" y1="35" x2="28" y2="41"/>
+    <line x1="72" y1="35" x2="72" y2="41"/>
+    <path d="M20 41 A8 8 0 0 0 36 41" fill="none"/>
+    <path d="M64 41 A8 8 0 0 0 80 41" fill="none"/>
+    <line x1="40" y1="70" x2="60" y2="70"/>
+  </g>
+
+  <circle cx="50" cy="24" r="4.2" fill="#0097A7"/>
+  <path d="M24 82 Q50 92 76 82" stroke="#0097A7" stroke-width="3.4" stroke-linecap="round" fill="none"/>
+</svg>
