@@ -36,7 +36,7 @@ import { PaymentAdapter } from '../services/paymentService';
 import { auth, fbSignOut, onAuthStateChanged, db } from '../services/firebase';
 import { doc, getDoc, setDoc, onSnapshot, collection, query as fsQuery, where, getDocs } from 'firebase/firestore';
 import { getStoredProfilePhoto } from '../services/profilePhotoService';
-import { isSuperAdminEmail } from '../services/roleService';
+import { isSuperAdminEmail, isCommissionerLike } from '../services/roleService';
 
 export type AppView = 
   | 'home'
@@ -238,6 +238,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('Could not attach Firestore listener', e);
     }
   }, [activeCommissioningId]);
+
+  // ---------------------------------------------------------------------------
+  // Live requests feed addressed to the signed-in party.
+  // The listener above only tracks whichever single document is currently
+  // "active" (i.e. already open) on this device. Without this, a commissioner
+  // never learns a deponent created/ringing a new request until they happen
+  // to open that exact request first — so an incoming call rings into
+  // nothing. Stream every commissioningRequests doc assigned to this user
+  // (by commissionerId for commissioners, by deponentUserId for deponents)
+  // so both the request list and any live call state stay current everywhere
+  // in the app, not just inside an already-open room.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!isSignedIn || !currentUser.id || currentUser.id === 'guest-deponent') return;
+
+    const field = isCommissionerLike(currentUser.role) ? 'commissionerId' : 'deponentUserId';
+    const q = fsQuery(collection(db, 'commissioningRequests'), where(field, '==', currentUser.id));
+
+    let unsub: (() => void) | undefined;
+    try {
+      unsub = onSnapshot(q, (snap) => {
+        setRequests(prev => {
+          const byId = new Map<string, CommissioningRequest>(prev.map(r => [r.id, r]));
+          snap.forEach((d) => {
+            const remoteData = d.data() as CommissioningRequest;
+            const existing = byId.get(remoteData.id);
+            byId.set(remoteData.id, existing
+              ? { ...existing, ...remoteData, auditTrail: remoteData.auditTrail || existing.auditTrail }
+              : remoteData);
+          });
+          return Array.from(byId.values());
+        });
+      }, (err) => {
+        console.warn('Firestore assigned-requests sync notice:', err?.message);
+      });
+    } catch (e) {
+      console.warn('Could not attach assigned-requests listener', e);
+    }
+
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [isSignedIn, currentUser.id, currentUser.role]);
 
   const isMasterAdmin = currentUser.role === 'master_admin' || currentUser.role === 'super_admin' || currentUser.role === 'admin' || isSuperAdminEmail(currentUser.email);
 

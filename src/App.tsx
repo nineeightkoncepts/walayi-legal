@@ -21,6 +21,7 @@ import { AuthorityOnboardingModal } from './components/onboarding/AuthorityOnboa
 import { CommissionerDashboard } from './components/commissioning/CommissionerDashboard';
 import { CommissionerSettings } from './components/commissioner/CommissionerSettings';
 import { OfflineIndicator } from './components/common/OfflineIndicator';
+import { IncomingCallBanner } from './components/common/IncomingCallBanner';
 import { canAccessView, resolveAccessibleView } from './services/roleService';
 
 // Global notification toast component
@@ -203,6 +204,7 @@ function MainAppShell() {
       <MainContent />
       <Footer />
       <NotificationToasts />
+      <IncomingCallBanner />
       <OfflineIndicator />
     </div>
   );
