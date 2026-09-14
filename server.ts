@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
+import { provisionDailyRoom, isDailyConfigured, dailyDomain } from './api/_lib/dailyRoom';
 
 dotenv.config();
 
@@ -22,12 +23,6 @@ const IOTEC_CLIENT_SECRET = process.env.IOTEC_CLIENT_SECRET || 'IO-ZHOcGmysOZ7Ll
 const IOTEC_WALLET_ID = process.env.IOTEC_WALLET_ID || '01a07b2d-748c-7102-8264-3b44bdbe8e38';
 const IOTEC_WALLET_NAME = process.env.IOTEC_WALLET_NAME || 'NINE EIGHT KONCEPTS TEST';
 const IOTEC_ENV = process.env.IOTEC_ENV || 'sandbox';
-
-// Daily.co WebRTC Video API Configuration — the API key stays server-side
-// only; the client never sees it, it just asks this server for a room URL.
-const DAILY_CO_API_KEY = process.env.DAILY_CO_API_KEY || '';
-const DAILY_CO_DOMAIN = process.env.DAILY_CO_DOMAIN || 'https://wallahi.daily.co';
-const DAILY_CO_ROOM_PREFIX = process.env.DAILY_CO_ROOM_PREFIX || 'wallahi-';
 
 // In-memory transaction registry for ioTec operations
 interface IoTecTransactionRecord {
@@ -111,8 +106,8 @@ app.get('/api/health', (req: Request, res: Response) => {
     iotecConfigured: !!(IOTEC_CLIENT_ID && IOTEC_CLIENT_SECRET),
     walletId: IOTEC_WALLET_ID,
     walletName: IOTEC_WALLET_NAME,
-    dailyConfigured: !!DAILY_CO_API_KEY,
-    dailyDomain: DAILY_CO_DOMAIN,
+    dailyConfigured: isDailyConfigured(),
+    dailyDomain: dailyDomain(),
     timestamp: new Date().toISOString()
   });
 });
@@ -559,64 +554,17 @@ app.post('/api/payments/iotec/webhook', (req: Request, res: Response) => {
 // Both parties call this with the same sessionId (the commissioning request
 // id), so the deterministic room name routes them into the same room.
 app.post('/api/video/daily/room', async (req: Request, res: Response) => {
+  const sessionId = String(req.body?.sessionId || '').trim();
+  if (!sessionId) {
+    return res.status(400).json({ error: 'sessionId is required' });
+  }
+
   try {
-    const sessionId = String(req.body?.sessionId || '').trim();
-    if (!sessionId) {
-      return res.status(400).json({ error: 'sessionId is required' });
-    }
-
-    const sanitized = sessionId.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
-    const roomName = `${DAILY_CO_ROOM_PREFIX}${sanitized}`.slice(0, 64);
-
-    if (!DAILY_CO_API_KEY) {
-      // No Daily.co account configured on this server yet — hand back a
-      // best-effort domain URL so the client has something to try, but flag
-      // it as unprovisioned so the UI can explain why joining may fail.
-      return res.json({
-        url: `${DAILY_CO_DOMAIN.replace(/\/$/, '')}/${roomName}`,
-        name: roomName,
-        isProvisioned: false
-      });
-    }
-
-    const createResp = await fetch('https://api.daily.co/v1/rooms', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${DAILY_CO_API_KEY}`
-      },
-      body: JSON.stringify({
-        name: roomName,
-        properties: {
-          enable_chat: true,
-          enable_screenshare: true,
-          start_video_off: false,
-          start_audio_off: false,
-          enable_advanced_chat: true
-        }
-      })
-    });
-
-    if (createResp.ok) {
-      const data = await createResp.json();
-      return res.json({ url: data.url, name: data.name || roomName, isProvisioned: true });
-    }
-
-    // Room may already exist from a prior session — fetch it instead of failing.
-    const fetchResp = await fetch(`https://api.daily.co/v1/rooms/${roomName}`, {
-      headers: { Authorization: `Bearer ${DAILY_CO_API_KEY}` }
-    });
-    if (fetchResp.ok) {
-      const data = await fetchResp.json();
-      return res.json({ url: data.url, name: data.name || roomName, isProvisioned: true });
-    }
-
-    const errBody = await createResp.text().catch(() => '');
-    console.warn('Daily.co room creation failed:', createResp.status, errBody);
-    return res.status(502).json({ error: 'Unable to provision Daily.co room', detail: errBody });
+    const room = await provisionDailyRoom(sessionId);
+    res.json(room);
   } catch (error: any) {
     console.warn('Daily.co room provisioning error:', error?.message);
-    res.status(500).json({ error: 'Daily.co room provisioning failed' });
+    res.status(502).json({ error: 'Unable to provision Daily.co room', detail: error?.message });
   }
 });
 
