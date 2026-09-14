@@ -58,165 +58,10 @@ export const LAWYER_KATO_USER: UserProfile = {
   bio: 'Practising Advocate at Kampala Associated Advocates preparing statutory declarations and litigation affidavits for clients.'
 };
 
-export const COMMISSIONER_KAJUBI_USER: UserProfile = {
-  id: 'cfo-kajubi',
-  fullName: 'Adv. Kajubi Lovelock',
-  email: 'kajubilovelock2026@gmail.com',
-  phone: '+256 701 842 911',
-  role: 'commissioner',
-  avatarUrl: '',
-  nationalIdNumber: 'CM84022109KP1X',
-  stationCity: 'Kampala Central',
-  lawFirmName: 'Lovelock Advocates & Commissioners',
-  firmName: 'Lovelock Advocates & Commissioners',
-  professionalCategory: 'commissioner_for_oaths',
-  isJudicialOfficer: false,
-  physicalChambersAddress: 'Plot 18 Lumumba Avenue, 4th Floor, Nakasero, Kampala',
-  authorities: [
-    {
-      type: 'advocate',
-      status: 'VERIFIED',
-      basis: 'ADVOCATES_ACT',
-      yearOfAdmission: 2014,
-      practisingCertificateYear: 2026,
-      licenceNumber: 'ADV/2026/0491',
-      verifiedAt: '2026-01-01'
-    },
-    {
-      type: 'commissioner_for_oaths',
-      status: 'VERIFIED',
-      basis: 'COMMISSIONER_ACT_CAP_5',
-      courtStation: 'High Court of Uganda (Commercial & Civil Division)',
-      licenceNumber: 'CFO/2026/0491',
-      verifiedAt: '2026-01-01',
-      expiresAt: '2028-12-31'
-    }
-  ],
-  isProSubscriber: true,
-  proPlanName: 'Pro Advocate',
-  proExpiresAt: '2026-12-31',
-  rating: 5.0,
-  reviewCount: 16,
-  completedCeremoniesCount: 28,
-  averageResponseMinutes: 2,
-  indicativeFeeUGX: 10000,
-  availableNow: true,
-  allowsRemote: true,
-  bio: 'Advocate of the High Court of Uganda and gazetted Commissioner for Oaths. Authorised to administer statutory affidavits, declarations, and court instruments.'
-};
-
-export const COMMISSIONER_SARAH_USER: UserProfile = {
-  id: 'cfo-sarah',
-  fullName: 'Adv. Sarah Nabukeera',
-  email: 'sarah.nabukeera@kaa.co.ug',
-  phone: '+256 782 550 120',
-  role: 'commissioner',
-  avatarUrl: '',
-  nationalIdNumber: 'CF87019283KL9P',
-  stationCity: 'Kampala',
-  lawFirmName: 'Kampala Associated Advocates',
-  firmName: 'Kampala Associated Advocates',
-  professionalCategory: 'commissioner_for_oaths',
-  isJudicialOfficer: false,
-  physicalChambersAddress: 'Plot 41 Nakasero Road, Kampala',
-  authorities: [
-    {
-      type: 'advocate',
-      status: 'VERIFIED',
-      basis: 'ADVOCATES_ACT',
-      yearOfAdmission: 2012,
-      practisingCertificateYear: 2026,
-      licenceNumber: 'ADV/2026/0118',
-      verifiedAt: '2026-01-01'
-    },
-    {
-      type: 'commissioner_for_oaths',
-      status: 'VERIFIED',
-      basis: 'COMMISSIONER_ACT_CAP_5',
-      courtStation: 'High Court of Uganda',
-      licenceNumber: 'CFO/2026/0118',
-      verifiedAt: '2026-01-01',
-      expiresAt: '2028-12-31'
-    }
-  ],
-  isProSubscriber: true,
-  proPlanName: 'Chambers Premier',
-  rating: 4.9,
-  reviewCount: 22,
-  completedCeremoniesCount: 45,
-  averageResponseMinutes: 4,
-  indicativeFeeUGX: 12000,
-  availableNow: true,
-  allowsRemote: true,
-  bio: 'Senior Associate and Commissioner for Oaths specializing in civil, banking and commercial statutory instruments.'
-};
-
-export const JUDICIAL_OFFICER_AKELLO_USER: UserProfile = {
-  id: 'jo-akello',
-  fullName: 'Her Worship Brenda Akello',
-  email: 'bakello@judiciary.go.ug',
-  phone: '+256 752 990 011',
-  role: 'judicial_officer',
-  avatarUrl: '',
-  nationalIdNumber: 'CF81023948MM4J',
-  stationCity: 'Mengo, Kampala',
-  isJudicialOfficer: true,
-  judicialTitle: 'Chief Magistrate',
-  court: 'Mengo Chief Magistrate Court',
-  professionalCategory: 'judicial_officer',
-  authorities: [
-    {
-      type: 'judicial_officer',
-      status: 'VERIFIED',
-      basis: 'JUDICIAL_OFFICE',
-      courtStation: 'Mengo Chief Magistrate Court',
-      institutionalDesignation: 'Chief Magistrate',
-      verifiedAt: '2026-01-01'
-    }
-  ],
-  isProSubscriber: false,
-  rating: 5.0,
-  reviewCount: 8,
-  completedCeremoniesCount: 14,
-  averageResponseMinutes: 5,
-  indicativeFeeUGX: 15000,
-  availableNow: true,
-  allowsRemote: true,
-  bio: 'Chief Magistrate presiding at Mengo Chief Magistrate Court. Statutory judicial authority under the Magistrates Courts Act.'
-};
-
-export const COMMISSIONER_TUMUSIIME_USER: UserProfile = {
-  id: 'cfo-tumusiime',
-  fullName: 'Adv. Brian Tumusiime',
-  email: 'brian@lovelocklaw.ug',
-  phone: '+256 772 334 556',
-  role: 'commissioner',
-  avatarUrl: '',
-  nationalIdNumber: 'CM86034928TY3E',
-  stationCity: 'Kampala Central',
-  lawFirmName: 'Lovelock Advocates & Commissioners',
-  firmName: 'Lovelock Advocates & Commissioners',
-  professionalCategory: 'commissioner_for_oaths',
-  isJudicialOfficer: false,
-  authorities: [
-    {
-      type: 'commissioner_for_oaths',
-      status: 'VERIFIED',
-      basis: 'COMMISSIONER_ACT_CAP_5',
-      courtStation: 'High Court of Uganda',
-      verifiedAt: '2026-01-01'
-    }
-  ],
-  isProSubscriber: false,
-  rating: 4.8,
-  reviewCount: 10,
-  completedCeremoniesCount: 19,
-  averageResponseMinutes: 3,
-  indicativeFeeUGX: 10000,
-  availableNow: true,
-  allowsRemote: true,
-  bio: 'Associate Advocate and Commissioner for Oaths at Lovelock Advocates & Commissioners.'
-};
+// Note: no mock/seed commissioner, notary, judicial officer, or justice of
+// the peace profiles are defined here on purpose — the system starts with
+// zero commissioners. Only real accounts created via sign-up (email or
+// Google) appear in the marketplace and commissioner directory.
 
 export const CLIENT_FLORENCE_USER: UserProfile = {
   id: 'client-florence',
@@ -268,43 +113,12 @@ export const INITIAL_USERS: UserProfile[] = [
   MASTER_ADMIN_USER,
   SUPER_ADMIN_USER,
   LAWYER_KATO_USER,
-  COMMISSIONER_KAJUBI_USER,
-  COMMISSIONER_SARAH_USER,
-  JUDICIAL_OFFICER_AKELLO_USER,
-  COMMISSIONER_TUMUSIIME_USER,
   CLIENT_FLORENCE_USER
 ];
 
-export const INITIAL_CREDENTIAL_DOCS: Record<string, CredentialDocument[]> = {
-  'cfo-kajubi': [
-    {
-      id: 'cred-kajubi-101',
-      name: '2026 Practising Certificate (Uganda Law Council)',
-      type: 'practising_certificate',
-      fileName: 'PC_2026_Adv_Kajubi_Lovelock.pdf',
-      fileSize: '1.4 MB',
-      uploadedAt: '2026-01-10T09:30:00Z',
-      validFrom: '2026-01-01',
-      validUntil: '2026-12-31',
-      issuingAuthority: 'Uganda Law Council / High Court of Uganda',
-      verificationReference: 'ULC-PC-2026-0491',
-      status: 'VERIFIED'
-    },
-    {
-      id: 'cred-kajubi-102',
-      name: 'Commissioner for Oaths Commission (Chief Justice of Uganda)',
-      type: 'chief_justice_commission',
-      fileName: 'CJ_Commission_Kajubi_Lovelock.pdf',
-      fileSize: '2.1 MB',
-      uploadedAt: '2026-01-10T09:32:00Z',
-      validFrom: '2024-03-15',
-      validUntil: '2028-03-14',
-      issuingAuthority: 'Office of the Chief Justice of Uganda',
-      verificationReference: 'CJ-CFO-WARRANT-2026-0491',
-      status: 'VERIFIED'
-    }
-  ]
-};
+// No seeded credential documents either — they belonged to the removed
+// mock commissioner profiles. Real commissioners submit their own.
+export const INITIAL_CREDENTIAL_DOCS: Record<string, CredentialDocument[]> = {};
 
 // Ready-to-verify completed demonstration instrument
 export const INITIAL_REQUESTS: CommissioningRequest[] = [

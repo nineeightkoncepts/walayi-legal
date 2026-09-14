@@ -104,7 +104,7 @@ export const NewCommissioningModal: React.FC = () => {
   const [selectedProId, setSelectedProId] = useState<string>(() => {
     if (preselectedCommissionerId) return preselectedCommissionerId;
     const defaultNonConflicted = verifiedPros.find(p => p.id !== currentUser.id);
-    return defaultNonConflicted ? defaultNonConflicted.id : (verifiedPros[0]?.id || 'cfo-kajubi');
+    return defaultNonConflicted ? defaultNonConflicted.id : (verifiedPros[0]?.id || '');
   });
 
   // Active conflict alert modal state
@@ -295,6 +295,14 @@ export const NewCommissioningModal: React.FC = () => {
 
   // Final payment execution & transaction creation
   const handleCreateAndPay = async (confirmedTxn?: PaymentTransaction, feeRef?: string) => {
+    if (!activePro) {
+      addNotification(
+        'No Commissioner Available',
+        'No commissioner has registered yet. Please check back once a commissioner has signed up.',
+        'ALERT'
+      );
+      return;
+    }
     if (activeProConflict.hasConflict) {
       setConflictModalData({
         commissionerName: activePro.fullName,
@@ -974,6 +982,15 @@ export const NewCommissioningModal: React.FC = () => {
 
           {/* Commissioner Cards List */}
           <div className="space-y-3" id="commissioner-selection-list">
+            {verifiedPros.length === 0 && (
+              <div className="p-6 rounded-2xl bg-amber-50/70 border border-amber-200 text-center space-y-1" id="no-commissioners-available">
+                <AlertTriangle className="w-6 h-6 text-amber-600 mx-auto" />
+                <p className="text-xs font-bold text-amber-900">No commissioners are registered yet</p>
+                <p className="text-[11px] text-amber-700">
+                  Check back once a commissioner for oaths has signed up on WALAYI.
+                </p>
+              </div>
+            )}
             {verifiedPros.map((pro) => {
               const conflictCheck = checkCommissionerConflict({
                 currentUser,
@@ -1133,8 +1150,9 @@ export const NewCommissioningModal: React.FC = () => {
 
             <button
               type="button"
-              disabled={activeProConflict.hasConflict}
+              disabled={!activePro || activeProConflict.hasConflict}
               onClick={() => {
+                if (!activePro) return;
                 if (activeProConflict.hasConflict) {
                   setConflictModalData({
                     commissionerName: activePro.fullName,

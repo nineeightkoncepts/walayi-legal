@@ -16,9 +16,11 @@ import {
 import {
   auth,
   db,
+  googleProvider,
   setPersistence,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInWithPopup,
   sendPasswordResetEmail,
   browserLocalPersistence,
   browserSessionPersistence
@@ -27,6 +29,16 @@ import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { isSuperAdminEmail } from '../../services/roleService';
 
 type AuthMode = 'signin' | 'signup' | 'forgot-password';
+
+// Google's brand mark isn't part of lucide-react, so it's drawn inline.
+const GoogleIcon: React.FC = () => (
+  <svg className="w-4 h-4" viewBox="0 0 48 48" aria-hidden="true">
+    <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/>
+    <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/>
+    <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/>
+    <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/>
+  </svg>
+);
 
 // Keeps the URL hash and the on-page mode in sync so the page is a real,
 // linkable, bookmarkable, back-button-friendly route (#/signin, #/signup,
@@ -111,6 +123,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onVerifyInstead }) => {
     }
     if (code === 'auth/network-request-failed' || message.includes('network')) {
       return 'Network error. Please check your connection and try again.';
+    }
+    if (code === 'auth/popup-blocked') {
+      return 'Your browser blocked the Google sign-in popup. Please allow popups for this site and try again.';
+    }
+    if (code === 'auth/account-exists-with-different-credential') {
+      return 'An account already exists with this email using a password. Please sign in with your password instead.';
+    }
+    if (code === 'auth/unauthorized-domain') {
+      return 'This domain is not yet authorized for Google sign-in. Please contact support.';
     }
     return message || 'An unexpected error occurred. Please try again.';
   };
@@ -212,6 +233,98 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onVerifyInstead }) => {
       finishAndEnter();
     } catch (err: any) {
       setErrorMessage(mapAuthError(err));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // --- GOOGLE SIGN-IN / SIGN-UP WORKFLOW ---
+  // One Firebase call (signInWithPopup) covers both cases: if this Google
+  // account has never signed in before, Firebase creates the auth user on
+  // the spot, so the same handler works from both the Sign In and Sign Up
+  // views. A brand-new account picks up the role selected in the Sign Up
+  // view's "I am a:" toggle (defaulting to deponent from the Sign In view,
+  // which has no role picker) — mirroring the email/password fallback.
+  const handleGoogleAuth = async () => {
+    setErrorMessage(null);
+    setIsLoading(true);
+
+    try {
+      const persistence = rememberMe ? browserLocalPersistence : browserSessionPersistence;
+      await setPersistence(auth, persistence);
+
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+
+      let userRole: UserRole = 'deponent';
+      let displayName = user.displayName || user.email?.split('@')[0] || 'WALAYI User';
+      let photoUrl = user.photoURL || '';
+      let isNewAccount = false;
+
+      const userDocRef = doc(db, 'users', user.uid);
+      const userDoc = await getDoc(userDocRef);
+
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        const r = (data.role || '').toLowerCase();
+        if (r === 'admin' || r === 'master_admin' || isSuperAdminEmail(user.email)) {
+          userRole = 'master_admin';
+        } else if (r === 'commissioner') {
+          userRole = 'commissioner';
+        } else {
+          userRole = 'deponent';
+        }
+        displayName = data.displayName || data.fullName || displayName;
+        photoUrl = data.profilePhotoUrl || data.avatarUrl || photoUrl;
+      } else {
+        isNewAccount = true;
+        const isAdmin = isSuperAdminEmail(user.email);
+        const chosenRole = mode === 'signup' ? signUpRole : 'user';
+        userRole = isAdmin ? 'master_admin' : (chosenRole === 'commissioner' ? 'commissioner' : 'deponent');
+
+        await setDoc(userDocRef, {
+          uid: user.uid,
+          id: user.uid,
+          email: user.email,
+          displayName,
+          fullName: displayName,
+          role: userRole === 'master_admin' ? 'admin' : (userRole === 'commissioner' ? 'commissioner' : 'user'),
+          profilePhotoUrl: photoUrl || null,
+          avatarUrl: photoUrl,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          phone: '',
+          location: 'Kampala',
+          verified: false,
+          fee: userRole === 'commissioner' ? 25000 : 0,
+          status: userRole === 'commissioner' ? 'PENDING' : 'ADMITTED',
+          authProvider: 'google'
+        }, { merge: true });
+      }
+
+      signInUser({
+        id: user.uid,
+        fullName: displayName,
+        email: user.email || '',
+        role: userRole,
+        avatarUrl: photoUrl
+      });
+
+      addNotification(
+        isNewAccount ? 'Account Created' : 'Sign In Successful',
+        isNewAccount
+          ? `Welcome to WALAYI, ${displayName}. Your account has been initialized.`
+          : `Welcome back, ${displayName}.`,
+        'SUCCESS'
+      );
+
+      finishAndEnter();
+    } catch (err: any) {
+      // A user closing the popup or double-clicking isn't an error worth
+      // surfacing — every other failure gets the usual friendly message.
+      if (err?.code !== 'auth/popup-closed-by-user' && err?.code !== 'auth/cancelled-popup-request') {
+        setErrorMessage(mapAuthError(err));
+      }
     } finally {
       setIsLoading(false);
     }
@@ -507,6 +620,25 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onVerifyInstead }) => {
                     </button>
                   </form>
 
+                  {/* Divider */}
+                  <div className="flex items-center gap-3">
+                    <div className="h-px flex-1 bg-slate-200" />
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Or</span>
+                    <div className="h-px flex-1 bg-slate-200" />
+                  </div>
+
+                  {/* Google Sign In */}
+                  <button
+                    type="button"
+                    onClick={handleGoogleAuth}
+                    disabled={isLoading}
+                    className="w-full py-3 px-4 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs border border-slate-300 shadow-sm transition-all cursor-pointer flex items-center justify-center gap-2.5 disabled:opacity-50"
+                    id="btn-google-signin"
+                  >
+                    <GoogleIcon />
+                    <span>Continue with Google</span>
+                  </button>
+
                   {/* Navigation link: Don't have an account? Sign Up */}
                   <div className="pt-3 text-center border-t border-slate-100">
                     <span className="text-xs text-slate-500">
@@ -662,6 +794,25 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onVerifyInstead }) => {
                       )}
                     </button>
                   </form>
+
+                  {/* Divider */}
+                  <div className="flex items-center gap-3">
+                    <div className="h-px flex-1 bg-slate-200" />
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Or</span>
+                    <div className="h-px flex-1 bg-slate-200" />
+                  </div>
+
+                  {/* Google Sign Up — uses the role selected above */}
+                  <button
+                    type="button"
+                    onClick={handleGoogleAuth}
+                    disabled={isLoading}
+                    className="w-full py-3 px-4 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs border border-slate-300 shadow-sm transition-all cursor-pointer flex items-center justify-center gap-2.5 disabled:opacity-50"
+                    id="btn-google-signup"
+                  >
+                    <GoogleIcon />
+                    <span>Continue with Google</span>
+                  </button>
 
                   {/* Navigation link: Already have an account? Sign In */}
                   <div className="pt-3 text-center border-t border-slate-100">

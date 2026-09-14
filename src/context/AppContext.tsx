@@ -34,7 +34,7 @@ import {
 import { checkCommissionerConflict } from '../utils/conflictValidation';
 import { PaymentAdapter } from '../services/paymentService';
 import { auth, fbSignOut, onAuthStateChanged, db } from '../services/firebase';
-import { doc, getDoc, setDoc, onSnapshot, collection, query as fsQuery, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, query as fsQuery, where, getDocs } from 'firebase/firestore';
 import { getStoredProfilePhoto } from '../services/profilePhotoService';
 import { isSuperAdminEmail, isCommissionerLike } from '../services/roleService';
 import { PRESENCE_HEARTBEAT_INTERVAL_MS } from '../services/presenceService';
@@ -701,6 +701,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!target) return;
 
     setUsers(prev => prev.filter(u => u.id !== userId));
+
+    // Delete the Firestore record too — otherwise the live commissioner
+    // directory listener (which streams the whole users collection) would
+    // simply pull the "deleted" account straight back into local state on
+    // its next snapshot.
+    deleteDoc(doc(db, 'users', userId)).catch(err => {
+      console.warn('Firestore user delete notice:', err?.message);
+    });
 
     logAdminAction({
       action: 'USER_DELETED',
