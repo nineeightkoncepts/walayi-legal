@@ -37,6 +37,7 @@ import { auth, fbSignOut, onAuthStateChanged, db } from '../services/firebase';
 import { doc, getDoc, setDoc, onSnapshot, collection, query as fsQuery, where, getDocs } from 'firebase/firestore';
 import { getStoredProfilePhoto } from '../services/profilePhotoService';
 import { isSuperAdminEmail, isCommissionerLike } from '../services/roleService';
+import { PRESENCE_HEARTBEAT_INTERVAL_MS } from '../services/presenceService';
 
 export type AppView = 
   | 'home'
@@ -419,6 +420,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             indicativeFeeUGX: typeof data.fee === 'number' ? data.fee : (data.indicativeFeeUGX || 25000),
             availableNow: data.availableNow !== undefined ? !!data.availableNow : true,
             allowsRemote: data.allowsRemote !== undefined ? !!data.allowsRemote : true,
+            lastActiveAt: data.lastActiveAt || undefined,
           });
         });
 
@@ -440,8 +442,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (existingIdByEmail && existingIdByEmail !== fc.id) return;
 
             const existing = byId.get(fc.id);
-            // Preserve any richer local profile fields already on record.
-            byId.set(fc.id, existing ? { ...fc, ...existing } : fc);
+            // Start from any richer local-only profile fields already on
+            // record, but let this fresh snapshot win on every field it
+            // actually carries (fc last) — otherwise a live field like
+            // lastActiveAt/availableNow would freeze at whatever value it
+            // had the first time this listener ever saw that user.
+            byId.set(fc.id, existing ? { ...existing, ...fc } : fc);
           });
 
           return Array.from(byId.values());
@@ -455,6 +461,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (unsub) unsub();
     };
   }, [isSignedIn]);
+
+  // ---------------------------------------------------------------------------
+  // Presence heartbeat.
+  // Firestore has no server-side "disconnect" hook (unlike Realtime Database's
+  // onDisconnect), so live "who's online" is approximated: while a signed-in
+  // user's tab is open and visible, keep refreshing their own lastActiveAt on
+  // their users/{id} doc. Anyone reading that doc treats it as online while
+  // the timestamp is recent (see isUserOnline) and stale once it isn't —
+  // this is what lets the marketplace show real online/offline commissioners.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!isSignedIn || !currentUser.id || currentUser.id === 'guest-deponent') return;
+
+    const beat = () => {
+      if (document.visibilityState !== 'visible') return;
+      setDoc(doc(db, 'users', currentUser.id), { lastActiveAt: new Date().toISOString() }, { merge: true })
+        .catch((err) => console.warn('Presence heartbeat notice:', err?.message));
+    };
+
+    beat();
+    const interval = setInterval(beat, PRESENCE_HEARTBEAT_INTERVAL_MS);
+    document.addEventListener('visibilitychange', beat);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', beat);
+    };
+  }, [isSignedIn, currentUser.id]);
 
   const signOutUser = async () => {
     try {

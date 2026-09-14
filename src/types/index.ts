@@ -147,6 +147,11 @@ export interface UserProfile {
   indicativeFeeUGX: number;
   availableNow: boolean;
   allowsRemote: boolean;
+  // Live presence heartbeat — ISO timestamp of this user's last active
+  // moment in the app. A user is considered online while it's recent
+  // (see isUserOnline in roleService); it is not the same as availableNow,
+  // which is a manually-set "willing to take new work" preference.
+  lastActiveAt?: string;
   bio?: string;
   physicalChambersAddress?: string;
   signatureDataUrl?: string;

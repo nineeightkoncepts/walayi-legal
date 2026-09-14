@@ -24,6 +24,7 @@ import {
 import { INITIAL_REVIEWS } from '../../data/mockData';
 import { checkCommissionerConflict } from '../../utils/conflictValidation';
 import { UserAvatar } from '../common/UserAvatar';
+import { isUserOnline, formatLastSeen } from '../../services/presenceService';
 
 interface ProfessionalProfileModalProps {
   user: UserProfile;
@@ -71,8 +72,8 @@ export const ProfessionalProfileModal: React.FC<ProfessionalProfileModalProps> =
                 shape="rounded"
                 className="border-2 border-blue-600 shadow-sm"
               />
-              {user.availableNow && !conflict.hasConflict && (
-                <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full" />
+              {isUserOnline(user.lastActiveAt) && !conflict.hasConflict && (
+                <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full" title="Online now" />
               )}
             </div>
 
@@ -119,6 +120,13 @@ export const ProfessionalProfileModal: React.FC<ProfessionalProfileModalProps> =
               <p className="text-xs text-blue-600 font-medium flex items-center justify-center sm:justify-start gap-1">
                 <MapPin className="w-3.5 h-3.5" />
                 {user.physicalChambersAddress || user.stationCity}
+              </p>
+
+              <p className={`text-xs font-bold flex items-center justify-center sm:justify-start gap-1.5 ${
+                isUserOnline(user.lastActiveAt) ? 'text-emerald-600' : 'text-slate-400'
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${isUserOnline(user.lastActiveAt) ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                {formatLastSeen(user.lastActiveAt)}
               </p>
             </div>
           </div>

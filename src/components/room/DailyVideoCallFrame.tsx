@@ -46,8 +46,9 @@ export const DailyVideoCallFrame: React.FC<DailyVideoCallFrameProps> = ({
   const localStreamRef = useRef<MediaStream | null>(null);
   const isInitializingRef = useRef<boolean>(false);
 
-  // Active Video Engine Mode
-  const [videoMode, setVideoMode] = useState<'BUILTIN_COURT' | 'DAILY_CLOUD'>('BUILTIN_COURT');
+  // Active Video Engine Mode — real Daily.co WebRTC by default; the
+  // built-in chamber is a manual fallback if the cloud room can't be joined.
+  const [videoMode, setVideoMode] = useState<'BUILTIN_COURT' | 'DAILY_CLOUD'>('DAILY_CLOUD');
   
   // Daily.co state
   const [roomUrl, setRoomUrl] = useState<string>(initialRoomUrl || '');
@@ -66,19 +67,14 @@ export const DailyVideoCallFrame: React.FC<DailyVideoCallFrameProps> = ({
 
   // Editable Daily Config
   const [customUrlInput, setCustomUrlInput] = useState<string>('');
-  const [apiKeyInput, setApiKeyInput] = useState<string>('');
   const [domainInput, setDomainInput] = useState<string>('');
 
-  // Load configuration
+  // Load configuration (domain is only used as a client-side fallback if the
+  // server-side room provisioning request fails; the Daily.co API key itself
+  // now lives only in the server's DAILY_CO_API_KEY environment variable).
   useEffect(() => {
     const config = ApiConfigService.loadConfig().dailyCo;
-    setApiKeyInput(config.apiKey || '');
     setDomainInput(config.domain || 'https://wallahi.daily.co');
-    
-    // If a custom API key or URL is preset, try Daily mode; otherwise start with Built-in Courtroom Video
-    if (config.apiKey || (initialRoomUrl && !initialRoomUrl.includes('wallahi.daily.co'))) {
-      setVideoMode('DAILY_CLOUD');
-    }
   }, [initialRoomUrl]);
 
   // Audio level simulator for built-in video feed
@@ -300,9 +296,8 @@ export const DailyVideoCallFrame: React.FC<DailyVideoCallFrameProps> = ({
       ...current,
       dailyCo: {
         ...current.dailyCo,
-        apiKey: apiKeyInput.trim(),
         domain: domainInput.trim() || 'https://wallahi.daily.co',
-        isConfigured: Boolean(apiKeyInput.trim() || domainInput.trim())
+        isConfigured: Boolean(current.dailyCo.apiKey || domainInput.trim())
       }
     };
     ApiConfigService.saveConfig(updated);
@@ -652,20 +647,7 @@ export const DailyVideoCallFrame: React.FC<DailyVideoCallFrameProps> = ({
 
               <div className="h-px bg-slate-200 my-2" />
 
-              {/* Option B: Daily API Key */}
-              <div className="space-y-1.5">
-                <label className="font-bold text-slate-800">Daily.co API Key (Automated Room Creation):</label>
-                <input
-                  type="password"
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder="e.g. 7f8a9b... from daily.co/dashboard"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-mono-code text-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                  id="input-daily-key-room"
-                />
-              </div>
-
-              {/* Option C: Daily Domain */}
+              {/* Option B: Daily Domain (fallback only) */}
               <div className="space-y-1.5">
                 <label className="font-bold text-slate-800">Daily.co Domain:</label>
                 <input

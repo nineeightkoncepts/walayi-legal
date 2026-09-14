@@ -23,6 +23,7 @@ import {
 import { ProfessionalProfileModal } from './ProfessionalProfileModal';
 import { UserAvatar } from '../common/UserAvatar';
 import { checkCommissionerConflict, ConflictCheckResult } from '../../utils/conflictValidation';
+import { isUserOnline, formatLastSeen } from '../../services/presenceService';
 
 export const MarketplaceView: React.FC = () => {
   const { 
@@ -85,8 +86,13 @@ export const MarketplaceView: React.FC = () => {
     return true;
   });
 
-  // Rank by real-time availability, rating, and experience
+  // Rank by real live presence first (online commissioners surface at the
+  // top so deponents can pick someone who can actually respond right now),
+  // then their own "accepting work" preference, rating, and experience.
   const sortedFiltered = [...filtered].sort((a, b) => {
+    const aOnline = isUserOnline(a.lastActiveAt);
+    const bOnline = isUserOnline(b.lastActiveAt);
+    if (aOnline !== bOnline) return aOnline ? -1 : 1;
     if (a.availableNow !== b.availableNow) {
       return a.availableNow ? -1 : 1;
     }
@@ -164,6 +170,7 @@ export const MarketplaceView: React.FC = () => {
             });
 
             const hasConflict = conflict.hasConflict;
+            const online = isUserOnline(pro.lastActiveAt);
 
             return (
               <div
@@ -187,8 +194,8 @@ export const MarketplaceView: React.FC = () => {
                       shape="rounded"
                       className="border border-slate-100 shadow-sm"
                     />
-                    {pro.availableNow && !hasConflict && (
-                      <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full animate-pulse" />
+                    {online && !hasConflict && (
+                      <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full animate-pulse" title="Online now" />
                     )}
                   </div>
 
@@ -218,6 +225,12 @@ export const MarketplaceView: React.FC = () => {
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
                         <MapPin className="w-3 h-3" />
                         {pro.stationCity}
+                      </span>
+                      <span className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-1 ${
+                        online ? 'text-emerald-600' : 'text-slate-400'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${online ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                        {formatLastSeen(pro.lastActiveAt)}
                       </span>
                     </div>
 

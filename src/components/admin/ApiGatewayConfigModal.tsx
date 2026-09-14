@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ApiConfigService, ApiGatewayConfig } from '../../services/apiConfigService';
 import { 
   X, 
@@ -32,6 +32,22 @@ export const ApiGatewayConfigModal: React.FC<ApiGatewayConfigModalProps> = ({ is
   }>({ loading: false });
 
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Daily.co room creation now happens server-side (the API key must never
+  // live in the browser) — reflect the server's actual configured state
+  // instead of a client-side secret field.
+  const [serverDailyStatus, setServerDailyStatus] = useState<{ checked: boolean; configured: boolean }>({
+    checked: false,
+    configured: false
+  });
+
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'DAILY' || serverDailyStatus.checked) return;
+    fetch('/api/health')
+      .then(res => res.json())
+      .then(data => setServerDailyStatus({ checked: true, configured: !!data?.dailyConfigured }))
+      .catch(() => setServerDailyStatus({ checked: true, configured: false }));
+  }, [isOpen, activeTab, serverDailyStatus.checked]);
 
   if (!isOpen) return null;
 
@@ -448,21 +464,28 @@ export const ApiGatewayConfigModal: React.FC<ApiGatewayConfigModalProps> = ({ is
                   />
                 </div>
 
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Daily API Key (REST Management Key)
-                  </label>
-                  <input
-                    type="password"
-                    value={config.dailyCo.apiKey}
-                    onChange={(e) => setConfig({
-                      ...config,
-                      dailyCo: { ...config.dailyCo, apiKey: e.target.value }
-                    })}
-                    placeholder="Enter your Daily.co API Key"
-                    className="w-full px-3 py-2 text-xs font-mono-code rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                    id="input-daily-api-key"
-                  />
+                <div className={`sm:col-span-2 p-3.5 rounded-xl border flex items-start gap-2.5 ${
+                  serverDailyStatus.configured
+                    ? 'bg-emerald-50 border-emerald-200'
+                    : 'bg-amber-50 border-amber-200'
+                }`}>
+                  {serverDailyStatus.configured ? (
+                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  )}
+                  <div className="text-[11px] leading-relaxed">
+                    <p className={`font-bold ${serverDailyStatus.configured ? 'text-emerald-900' : 'text-amber-900'}`}>
+                      Daily API Key: {serverDailyStatus.checked
+                        ? (serverDailyStatus.configured ? 'Configured on server' : 'Not configured on server')
+                        : 'Checking…'}
+                    </p>
+                    <p className={serverDailyStatus.configured ? 'text-emerald-800' : 'text-amber-800'}>
+                      Room creation runs on the server so the secret key is never exposed to the browser.
+                      Set it as the <code className="font-mono-code">DAILY_CO_API_KEY</code> environment variable on your
+                      server/deployment (not in this dashboard), then restart the server.
+                    </p>
+                  </div>
                 </div>
 
                 <div>
@@ -526,10 +549,14 @@ export const ApiGatewayConfigModal: React.FC<ApiGatewayConfigModalProps> = ({ is
                     Click on <strong>Developers</strong> on the left navigation menu.
                   </li>
                   <li>
-                    Under <strong>API keys</strong>, click <em>Create API key</em> and copy the generated secret key. Paste it into the <strong>Daily API Key</strong> field above.
+                    Under <strong>API keys</strong>, click <em>Create API key</em> and copy the generated secret key.
                   </li>
                   <li>
-                    Your <strong>Daily Domain</strong> is your Daily workspace URL (e.g. <code>https://your-domain.daily.co</code>), visible at the top of your Daily dashboard.
+                    Set it as the <strong>DAILY_CO_API_KEY</strong> environment variable on your server/deployment
+                    platform, then restart the server — it is never entered into this dashboard.
+                  </li>
+                  <li>
+                    Your <strong>Daily Domain</strong> is your Daily workspace URL (e.g. <code>https://your-domain.daily.co</code>), visible at the top of your Daily dashboard. It's only used as a fallback here.
                   </li>
                   <li>
                     Click <strong>Test Daily.Co Signaling</strong> to verify handshake, then click <strong>Save & Apply Credentials</strong>.
