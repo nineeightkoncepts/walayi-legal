@@ -28,10 +28,26 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    // Admin-tier roles a self-signup or self-edit may never grant itself —
+    // only an existing admin (isAdmin()) may set these.
+    function isPrivilegedRole(role) {
+      return role == 'admin' || role == 'master_admin' || role == 'super_admin';
+    }
+
     // Users Collection
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create, update: if isOwner(userId) || isAdmin();
+      // A user may self-register their own profile, but never with an
+      // admin-tier role — that must be granted by an existing admin.
+      allow create: if isAdmin() || (isOwner(userId) && !isPrivilegedRole(request.resource.data.role));
+      // A user may edit their own profile (name, phone, signature, fee,
+      // availability, etc.) but may never change their OWN role — that is
+      // an admin-only action, enforced here by requiring it stay identical
+      // unless the writer is already an admin.
+      allow update: if isAdmin() || (
+        isOwner(userId) &&
+        request.resource.data.role == resource.data.role
+      );
       allow delete: if isAdmin();
     }
 

@@ -639,41 +639,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateUserRole = (userId: string, newRole: UserRole) => {
+    // Client-side guard for a fast, clear failure — the real enforcement is
+    // in firestore.rules (only an admin-authored write may change `role`),
+    // since a UI-level check alone can always be bypassed.
+    if (!isMasterAdmin) {
+      console.warn('updateUserRole: blocked — only an admin may change a user\'s role.');
+      return;
+    }
+
     const targetUser = users.find(u => u.id === userId);
     if (!targetUser) return;
 
     const oldRole = targetUser.role;
     const isLegalPro = ['commissioner', 'advocate', 'notary', 'judicial_officer', 'justice_of_peace'].includes(newRole);
+    let nextAuthorities = targetUser.authorities || [];
 
-    setUsers(prev => prev.map(u => {
-      if (u.id === userId) {
-        let auths = u.authorities || [];
-        if (isLegalPro && auths.length === 0) {
-          auths = [
-            {
-              type: newRole === 'commissioner' ? 'commissioner_for_oaths' : (newRole === 'notary' ? 'notary_public' : 'advocate'),
-              status: 'VERIFIED',
-              basis: 'COMMISSIONER_ACT_CAP_5',
-              yearOfAdmission: 2024,
-              practisingCertificateYear: 2026,
-              verifiedAt: new Date().toISOString(),
-              licenceNumber: `LIC-UG-${Math.floor(10000 + Math.random() * 90000)}`
-            }
-          ];
+    if (isLegalPro && nextAuthorities.length === 0) {
+      nextAuthorities = [
+        {
+          type: newRole === 'commissioner' ? 'commissioner_for_oaths' : (newRole === 'notary' ? 'notary_public' : 'advocate'),
+          status: 'VERIFIED',
+          basis: 'COMMISSIONER_ACT_CAP_5',
+          yearOfAdmission: 2024,
+          practisingCertificateYear: 2026,
+          verifiedAt: new Date().toISOString(),
+          licenceNumber: `LIC-UG-${Math.floor(10000 + Math.random() * 90000)}`
         }
-        return {
-          ...u,
-          role: newRole,
-          authorities: auths
-        };
-      }
-      return u;
-    }));
+      ];
+    }
+
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole, authorities: nextAuthorities } : u));
 
     // If updating currently logged in user
     if (currentUser.id === userId) {
       setCurrentUser(prev => ({ ...prev, role: newRole }));
     }
+
+    // Persist to Firestore — otherwise the live users-directory listener
+    // simply re-syncs the old role back in on its next snapshot, silently
+    // discarding the change the moment this admin's session refreshes.
+    // Firestore stores the collapsed admin-tier value as 'admin' and the
+    // plain client role as 'user' (matching how sign-up and the auth-state
+    // listener already read/write this field) rather than the UI's more
+    // granular UserRole distinctions.
+    const firestoreRole =
+      newRole === 'master_admin' || newRole === 'super_admin' || newRole === 'admin' ? 'admin' :
+      newRole === 'deponent' ? 'user' :
+      newRole;
+    setDoc(doc(db, 'users', userId), {
+      role: firestoreRole,
+      authorities: nextAuthorities,
+      updatedAt: new Date().toISOString()
+    }, { merge: true }).catch(err => {
+      console.warn('Firestore role update notice:', err?.message);
+    });
 
     logAdminAction({
       action: 'USER_ROLE_ASSIGNED',
