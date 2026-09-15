@@ -51,7 +51,7 @@ function drawCenteredText(page: PDFPage, text: string, cx: number, y: number, si
 }
 
 /** Draws the commissioner's official digital stamp — a round dual-ring seal. */
-function drawDigitalStamp(
+export function drawDigitalStamp(
   page: PDFPage,
   font: PDFFont,
   fontBold: PDFFont,
@@ -82,7 +82,7 @@ const formatDate = (iso?: string): string => {
  * digital stamp, directly onto the real document's last page.
  */
 /** Resolves which page a mark lands on: the signer's chosen page if valid, else the document's last page. */
-function resolveMarkPage(pages: PDFPage[], placement?: DocumentMarkPlacement): PDFPage {
+export function resolveMarkPage(pages: PDFPage[], placement?: DocumentMarkPlacement): PDFPage {
   if (placement && placement.page >= 0 && placement.page < pages.length) {
     return pages[placement.page];
   }
@@ -90,12 +90,12 @@ function resolveMarkPage(pages: PDFPage[], placement?: DocumentMarkPlacement): P
 }
 
 /** Converts a signer-chosen ratio (top-down, screen convention) into a PDF point (bottom-up) on that page. */
-function placementToPoint(page: PDFPage, placement: DocumentMarkPlacement): { x: number; y: number } {
+export function placementToPoint(page: PDFPage, placement: DocumentMarkPlacement): { x: number; y: number } {
   const { width, height } = page.getSize();
   return { x: placement.xRatio * width, y: height - placement.yRatio * height };
 }
 
-async function placeSignaturesOnOriginal(pdfDoc: PDFDocument, request: CommissioningRequest) {
+export async function placeSignaturesOnOriginal(pdfDoc: PDFDocument, request: CommissioningRequest) {
   const pages = pdfDoc.getPages();
   const lastPage = pages[pages.length - 1];
   const { width: lastPageWidth } = lastPage.getSize();
