@@ -167,6 +167,18 @@ export interface UserProfile {
   isPrisonOfficerJP?: boolean;
 }
 
+// A signer-chosen spot on the real uploaded document — captured by clicking
+// the rendered PDF in PdfSignaturePlacer — for where a signature or the
+// commissioner's digital stamp should be overlaid.
+export interface DocumentMarkPlacement {
+  /** 0-indexed page number within the original document. */
+  page: number;
+  /** Fraction (0-1) of the page width, from the left edge. */
+  xRatio: number;
+  /** Fraction (0-1) of the page height, from the TOP edge (screen convention). */
+  yRatio: number;
+}
+
 export interface AnnexureItem {
   id: string;
   identifier: string; // e.g. "A", "B", "C", "D1", "D2"
@@ -303,6 +315,10 @@ export interface CommissioningRequest {
   deponentSignatureDataUrl?: string;
   deponentThumbprintDataUrl?: string;
   deponentSignedAt?: string;
+  // Where on the real uploaded document (page + ratio-based x/y, chosen by
+  // clicking the rendered PDF) the deponent's mark should be placed. Unset
+  // means the overlay falls back to a default position on the last page.
+  deponentMarkPlacement?: DocumentMarkPlacement;
 
   assignedProfessionalId?: string;
   assignedProfessionalName?: string;
@@ -312,6 +328,9 @@ export interface CommissioningRequest {
   commissionerSignatureDataUrl?: string;
   commissionerSignedAt?: string;
   commissionerSealSerial?: string;
+  // Where the commissioner's signature + digital stamp block should be
+  // placed on the real document. Same fallback behaviour as above.
+  commissionerMarkPlacement?: DocumentMarkPlacement;
 
   status: CommissioningStatus;
   ceremonyStep?: number;

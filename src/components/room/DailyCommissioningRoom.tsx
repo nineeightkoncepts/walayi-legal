@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
-import { CommissioningStatus, SolemnisationType } from '../../types';
+import { CommissioningStatus, SolemnisationType, DocumentMarkPlacement } from '../../types';
 import { generateStatutoryJurat, getStatutoryOathText } from '../../services/juratService';
 import { SignatureCanvas } from '../common/SignatureCanvas';
 import { OfficialSeal } from '../common/OfficialSeal';
@@ -49,6 +49,7 @@ import {
   Scale
 } from 'lucide-react';
 import { ThumbprintCapture } from '../common/ThumbprintCapture';
+import { PdfSignaturePlacer } from '../common/PdfSignaturePlacer';
 import { ExecutionMethod } from '../../types';
 import { BrandLogo } from '../common/BrandLogo';
 import { UserAvatar } from '../common/UserAvatar';
@@ -129,13 +130,76 @@ export const DailyCommissioningRoom: React.FC = () => {
   const [commissionerSignData, setCommissionerSignData] = useState<string | null>(activeRequest.commissionerSignatureDataUrl || null);
   const [sealApplied, setSealApplied] = useState<boolean>(!!activeRequest.commissionerSealSerial);
   const [isDeponentMode, setIsDeponentMode] = useState<boolean>(false);
-  
+
   const [showAuditModal, setShowAuditModal] = useState<boolean>(false);
   const [auditModalTab, setAuditModalTab] = useState<'instrument' | 'audit'>('instrument');
   const [showApiGatewayModal, setShowApiGatewayModal] = useState<boolean>(false);
   const [generatedJurat, setGeneratedJurat] = useState<string>('');
 
+  // A mark (signature/thumbprint) that's been captured but not yet placed
+  // on the document — holds it while PdfSignaturePlacer is shown, so the
+  // request is only updated once the signer has confirmed (or skipped)
+  // exactly where it should land on the real uploaded PDF.
+  const [pendingDeponentMark, setPendingDeponentMark] = useState<{ dataUrl: string; kind: ExecutionMethod } | null>(null);
+  const [pendingCommissionerMark, setPendingCommissionerMark] = useState<string | null>(null);
+
   const isPaymentPaid = activeRequest.paymentStatus === 'ESCROWED' || activeRequest.paymentStatus === 'RELEASED';
+  // Placement on the real document is only possible when the source file
+  // itself was a genuine PDF (pdf-lib can't parse .doc/.docx) — otherwise
+  // marks fall back to a default position at final-instrument build time.
+  const canPlaceOnOriginal = !!activeRequest.rawFileUrl && activeRequest.originalMimeType === 'application/pdf';
+
+  const finalizeDeponentMark = (dataUrl: string, kind: ExecutionMethod, placement?: DocumentMarkPlacement) => {
+    if (kind === 'SIGNATURE') {
+      setDeponentSignData(dataUrl);
+    } else {
+      setDeponentThumbData(dataUrl);
+    }
+    updateCommissioningRequest(activeRequest.id, {
+      ...(kind === 'SIGNATURE' ? { deponentSignatureDataUrl: dataUrl } : { deponentThumbprintDataUrl: dataUrl }),
+      deponentSignedAt: new Date().toISOString(),
+      ...(placement ? { deponentMarkPlacement: placement } : {})
+    } as any, {
+      eventType: kind === 'SIGNATURE' ? 'DEPONENT_SIGNED' : 'THUMBPRINT_CAPTURED',
+      details: kind === 'SIGNATURE'
+        ? `Deponent executed the document with an electronic signature${placement ? ', placed at a chosen location on the instrument' : ''}.`
+        : 'Biometric thumbprint captured and confirmed by deponent.'
+    });
+    setPendingDeponentMark(null);
+    if (!isDeponentMode) handleNextStep(10);
+  };
+
+  // Routes a freshly-captured deponent mark either straight to persistence
+  // (no real PDF to place it on) or into the placement step first.
+  const handleDeponentMarkCaptured = (dataUrl: string, kind: ExecutionMethod) => {
+    if (canPlaceOnOriginal) {
+      setPendingDeponentMark({ dataUrl, kind });
+    } else {
+      finalizeDeponentMark(dataUrl, kind);
+    }
+  };
+
+  const finalizeCommissionerMark = (dataUrl: string, placement?: DocumentMarkPlacement) => {
+    setCommissionerSignData(dataUrl);
+    updateCommissioningRequest(activeRequest.id, {
+      commissionerSignatureDataUrl: dataUrl,
+      commissionerSignedAt: new Date().toISOString(),
+      ...(placement ? { commissionerMarkPlacement: placement } : {})
+    } as any, {
+      eventType: 'COMMISSIONER_SIGNED',
+      details: `Commissioner executed the instrument with an electronic signature${placement ? ', placed at a chosen location on the document' : ''}.`
+    });
+    setPendingCommissionerMark(null);
+    handleNextStep(11);
+  };
+
+  const handleCommissionerMarkCaptured = (dataUrl: string) => {
+    if (canPlaceOnOriginal) {
+      setPendingCommissionerMark(dataUrl);
+    } else {
+      finalizeCommissionerMark(dataUrl);
+    }
+  };
 
   // Synchronize ceremony step and execution assets when updated remotely
   useEffect(() => {
@@ -1612,7 +1676,16 @@ export const DailyCommissioningRoom: React.FC = () => {
                       </div>
                     )}
 
-                    {(deponentSignData || deponentThumbData) ? (
+                    {pendingDeponentMark ? (
+                      <PdfSignaturePlacer
+                        pdfUrl={activeRequest.rawFileUrl!}
+                        markerImageUrl={pendingDeponentMark.dataUrl}
+                        markerWidthPx={pendingDeponentMark.kind === 'THUMBPRINT' ? 60 : 130}
+                        label="Click on the document to place your signature"
+                        onConfirm={(placement) => finalizeDeponentMark(pendingDeponentMark.dataUrl, pendingDeponentMark.kind, placement)}
+                        onSkip={() => finalizeDeponentMark(pendingDeponentMark.dataUrl, pendingDeponentMark.kind)}
+                      />
+                    ) : (deponentSignData || deponentThumbData) ? (
                       <div className="text-center space-y-6 py-8 animate-fadeIn">
                         <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-200">
                           <CheckCircle2 className="w-10 h-10" />
@@ -1707,17 +1780,7 @@ export const DailyCommissioningRoom: React.FC = () => {
                         
                         {currentUser.signatureDataUrl && currentUser.signatureDataUrl.trim().length > 0 && (
                           <button
-                            onClick={() => {
-                              setDeponentSignData(currentUser.signatureDataUrl!);
-                              updateCommissioningRequest(activeRequest.id, {
-                                deponentSignatureDataUrl: currentUser.signatureDataUrl,
-                                deponentSignedAt: new Date().toISOString()
-                              }, {
-                                eventType: 'DEPONENT_SIGNED',
-                                details: 'Deponent executed document using saved electronic signature.'
-                              });
-                              if (!isDeponentMode) handleNextStep(10);
-                            }}
+                            onClick={() => handleDeponentMarkCaptured(currentUser.signatureDataUrl!, 'SIGNATURE')}
                             className="w-full p-4 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-between group hover:bg-blue-100 transition-all cursor-pointer"
                             id="btn-use-saved-signature"
                           >
@@ -1746,17 +1809,7 @@ export const DailyCommissioningRoom: React.FC = () => {
                         <SignatureCanvas
                           signerName={activeRequest.deponentName}
                           roleLabel="Deponent"
-                          onSave={(dataUrl) => {
-                            setDeponentSignData(dataUrl);
-                            updateCommissioningRequest(activeRequest.id, {
-                              deponentSignatureDataUrl: dataUrl,
-                              deponentSignedAt: new Date().toISOString()
-                            }, {
-                              eventType: 'DEPONENT_SIGNED',
-                              details: 'Deponent executed document by drawing a digital signature.'
-                            });
-                            if (!isDeponentMode) handleNextStep(10);
-                          }}
+                          onSave={(dataUrl) => handleDeponentMarkCaptured(dataUrl, 'SIGNATURE')}
                         />
                       </div>
                     ) : (
@@ -1772,22 +1825,14 @@ export const DailyCommissioningRoom: React.FC = () => {
 
                         <ThumbprintCapture
                           onCapture={(dataUrl) => {
-                            setDeponentThumbData(dataUrl);
-                            updateCommissioningRequest(activeRequest.id, {
-                              deponentThumbprintDataUrl: dataUrl,
-                              deponentSignedAt: new Date().toISOString()
-                            }, {
-                              eventType: 'THUMBPRINT_CAPTURED',
-                              details: 'Biometric thumbprint captured and confirmed by deponent.'
-                            });
-                            
-                            // Final execution event
+                            // Final execution event (audit-only, no field
+                            // changes — the mark itself is persisted once
+                            // placement is confirmed/skipped below).
                             updateCommissioningRequest(activeRequest.id, {}, {
                               eventType: 'DEPONENT_EXECUTED',
                               details: 'Document successfully executed via biometric thumbprint.'
                             });
-
-                            if (!isDeponentMode) handleNextStep(10);
+                            handleDeponentMarkCaptured(dataUrl, 'THUMBPRINT');
                           }}
                           onCancel={() => setExecutionMethod(null)}
                         />
@@ -1801,64 +1846,54 @@ export const DailyCommissioningRoom: React.FC = () => {
             {/* STAGE 10: Commissioner Signing */}
             {isCommissioner && ceremonyStep === 10 && (
               <div className="space-y-4">
-                {currentUser.signatureDataUrl && currentUser.signatureDataUrl.trim().length > 0 && (
+                {pendingCommissionerMark ? (
+                  <PdfSignaturePlacer
+                    pdfUrl={activeRequest.rawFileUrl!}
+                    markerImageUrl={pendingCommissionerMark}
+                    markerWidthPx={130}
+                    label="Click on the document to place your signature"
+                    onConfirm={(placement) => finalizeCommissionerMark(pendingCommissionerMark, placement)}
+                    onSkip={() => finalizeCommissionerMark(pendingCommissionerMark)}
+                  />
+                ) : (
                   <>
-                    <button
-                      onClick={() => {
-                        setCommissionerSignData(currentUser.signatureDataUrl!);
-                        updateCommissioningRequest(activeRequest.id, {
-                          commissionerSignatureDataUrl: currentUser.signatureDataUrl,
-                          commissionerSignedAt: new Date().toISOString()
-                        }, {
-                          eventType: 'COMMISSIONER_SIGNED',
-                          details: 'Commissioner executed the instrument using a saved electronic signature.'
-                        });
-                        handleNextStep(11);
-                      }}
-                      className="w-full p-4 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-between group hover:bg-blue-100 transition-all cursor-pointer"
-                      id="btn-use-saved-commissioner-signature"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-white border border-blue-100 flex items-center justify-center overflow-hidden">
-                          <img src={currentUser.signatureDataUrl} alt="Saved" className="max-w-[80%] max-h-[80%] object-contain" />
-                        </div>
-                        <div className="text-left">
-                          <div className="text-xs font-bold text-blue-900 uppercase">USE SAVED SIGNATURE</div>
-                          <div className="text-[10px] text-blue-600">Statutory preference</div>
-                        </div>
-                      </div>
-                      <CheckCircle2 className="w-5 h-5 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
+                    {currentUser.signatureDataUrl && currentUser.signatureDataUrl.trim().length > 0 && (
+                      <>
+                        <button
+                          onClick={() => handleCommissionerMarkCaptured(currentUser.signatureDataUrl!)}
+                          className="w-full p-4 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-between group hover:bg-blue-100 transition-all cursor-pointer"
+                          id="btn-use-saved-commissioner-signature"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-white border border-blue-100 flex items-center justify-center overflow-hidden">
+                              <img src={currentUser.signatureDataUrl} alt="Saved" className="max-w-[80%] max-h-[80%] object-contain" />
+                            </div>
+                            <div className="text-left">
+                              <div className="text-xs font-bold text-blue-900 uppercase">USE SAVED SIGNATURE</div>
+                              <div className="text-[10px] text-blue-600">Statutory preference</div>
+                            </div>
+                          </div>
+                          <CheckCircle2 className="w-5 h-5 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </button>
 
-                    <div className="relative">
-                      <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                        <div className="w-full border-t border-slate-200"></div>
-                      </div>
-                      <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-widest">
-                        <span className="bg-white px-2 text-slate-400">OR DRAW NEW</span>
-                      </div>
-                    </div>
+                        <div className="relative">
+                          <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                            <div className="w-full border-t border-slate-200"></div>
+                          </div>
+                          <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-widest">
+                            <span className="bg-white px-2 text-slate-400">OR DRAW NEW</span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    <SignatureCanvas
+                      signerName={activeRequest.assignedProfessionalName || 'Adv. Kajubi Lovelock'}
+                      roleLabel="Commissioner for Oaths"
+                      onSave={(dataUrl) => handleCommissionerMarkCaptured(dataUrl)}
+                    />
                   </>
                 )}
-
-                <SignatureCanvas
-                  signerName={activeRequest.assignedProfessionalName || 'Adv. Kajubi Lovelock'}
-                  roleLabel="Commissioner for Oaths"
-                  onSave={(dataUrl) => {
-                    setCommissionerSignData(dataUrl);
-                    // Persist the Commissioner's signature onto the shared
-                    // instrument right away (mirrors the Deponent at Stage 9),
-                    // so both parties — and the final document — always carry it.
-                    updateCommissioningRequest(activeRequest.id, {
-                      commissionerSignatureDataUrl: dataUrl,
-                      commissionerSignedAt: new Date().toISOString(),
-                    }, {
-                      eventType: 'COMMISSIONER_SIGNED',
-                      details: 'Commissioner executed the instrument with an electronic signature.'
-                    });
-                    handleNextStep(11);
-                  }}
-                />
               </div>
             )}
 

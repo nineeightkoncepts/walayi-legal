@@ -1,5 +1,5 @@
 import { PDFDocument, PDFPage, PDFFont, StandardFonts, rgb } from 'pdf-lib';
-import { CommissioningRequest } from '../types';
+import { CommissioningRequest, DocumentMarkPlacement } from '../types';
 import { buildCertifiedInstrumentPdf, downloadCertifiedInstrumentPdf } from './pdfService';
 
 /**
@@ -81,10 +81,24 @@ const formatDate = (iso?: string): string => {
  * available, each party's saved profile signature) — plus the commissioner's
  * digital stamp, directly onto the real document's last page.
  */
+/** Resolves which page a mark lands on: the signer's chosen page if valid, else the document's last page. */
+function resolveMarkPage(pages: PDFPage[], placement?: DocumentMarkPlacement): PDFPage {
+  if (placement && placement.page >= 0 && placement.page < pages.length) {
+    return pages[placement.page];
+  }
+  return pages[pages.length - 1];
+}
+
+/** Converts a signer-chosen ratio (top-down, screen convention) into a PDF point (bottom-up) on that page. */
+function placementToPoint(page: PDFPage, placement: DocumentMarkPlacement): { x: number; y: number } {
+  const { width, height } = page.getSize();
+  return { x: placement.xRatio * width, y: height - placement.yRatio * height };
+}
+
 async function placeSignaturesOnOriginal(pdfDoc: PDFDocument, request: CommissioningRequest) {
   const pages = pdfDoc.getPages();
   const lastPage = pages[pages.length - 1];
-  const { width } = lastPage.getSize();
+  const { width: lastPageWidth } = lastPage.getSize();
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -92,12 +106,20 @@ async function placeSignaturesOnOriginal(pdfDoc: PDFDocument, request: Commissio
   const boxW = 190;
   const boxH = 46;
   const baseY = 86;
-  const leftX = 48;
-  const rightX = width - 48 - boxW;
+  const defaultLeftX = 48;
+  const defaultRightX = lastPageWidth - 48 - boxW;
 
-  // --- Deponent's designated provision (bottom-left) ---
-  lastPage.drawText('DEPONENT SIGNATURE', { x: leftX, y: baseY + boxH + 6, size: 7, font: fontBold, color: MUTED });
-  lastPage.drawRectangle({ x: leftX, y: baseY, width: boxW, height: boxH, borderColor: LINE, borderWidth: 0.8 });
+  // --- Deponent's designated provision — the signer's chosen spot, or a
+  // default bottom-left box on the last page if they skipped placement. ---
+  const deponentPage = resolveMarkPage(pages, request.deponentMarkPlacement);
+  const deponentPoint = request.deponentMarkPlacement
+    ? placementToPoint(deponentPage, request.deponentMarkPlacement)
+    : null;
+  const deponentX = deponentPoint ? deponentPoint.x - boxW / 2 : defaultLeftX;
+  const deponentY = deponentPoint ? deponentPoint.y - boxH / 2 : baseY;
+
+  deponentPage.drawText('DEPONENT SIGNATURE', { x: deponentX, y: deponentY + boxH + 6, size: 7, font: fontBold, color: MUTED });
+  deponentPage.drawRectangle({ x: deponentX, y: deponentY, width: boxW, height: boxH, borderColor: LINE, borderWidth: 0.8 });
 
   const isThumb = request.deponentExecutionMethod === 'THUMBPRINT';
   const deponentAsset = isThumb ? request.deponentThumbprintDataUrl : request.deponentSignatureDataUrl;
@@ -105,50 +127,60 @@ async function placeSignaturesOnOriginal(pdfDoc: PDFDocument, request: Commissio
     try {
       const img = await embedImageFromDataUrl(pdfDoc, deponentAsset);
       const dims = img.scaleToFit(boxW - 16, boxH - 14);
-      lastPage.drawImage(img, {
-        x: leftX + (boxW - dims.width) / 2,
-        y: baseY + (boxH - dims.height) / 2,
+      deponentPage.drawImage(img, {
+        x: deponentX + (boxW - dims.width) / 2,
+        y: deponentY + (boxH - dims.height) / 2,
         width: dims.width,
         height: dims.height
       });
     } catch {
-      drawCenteredText(lastPage, request.deponentName, leftX + boxW / 2, baseY + boxH / 2 - 4, 11, font);
+      drawCenteredText(deponentPage, request.deponentName, deponentX + boxW / 2, deponentY + boxH / 2 - 4, 11, font);
     }
   } else {
-    drawCenteredText(lastPage, request.deponentName, leftX + boxW / 2, baseY + boxH / 2 - 4, 11, font);
+    drawCenteredText(deponentPage, request.deponentName, deponentX + boxW / 2, deponentY + boxH / 2 - 4, 11, font);
   }
-  lastPage.drawText(request.deponentName, { x: leftX, y: baseY - 12, size: 8, font: fontBold, color: INK });
-  lastPage.drawText(
+  deponentPage.drawText(request.deponentName, { x: deponentX, y: deponentY - 12, size: 8, font: fontBold, color: INK });
+  deponentPage.drawText(
     `${isThumb ? 'Thumbprint' : 'Signature'} • ${formatDate(request.deponentSignedAt)}`,
-    { x: leftX, y: baseY - 23, size: 6.5, font, color: MUTED }
+    { x: deponentX, y: deponentY - 23, size: 6.5, font, color: MUTED }
   );
 
-  // --- Commissioner's designated provision (bottom-right) ---
-  lastPage.drawText('COMMISSIONER ATTESTATION', { x: rightX, y: baseY + boxH + 6, size: 7, font: fontBold, color: MUTED });
-  lastPage.drawRectangle({ x: rightX, y: baseY, width: boxW, height: boxH, borderColor: LINE, borderWidth: 0.8 });
+  // --- Commissioner's designated provision (signature + digital stamp) —
+  // again the signer's chosen spot, or a default bottom-right box. ---
+  const commissionerPage = resolveMarkPage(pages, request.commissionerMarkPlacement);
+  const commissionerPoint = request.commissionerMarkPlacement
+    ? placementToPoint(commissionerPage, request.commissionerMarkPlacement)
+    : null;
+  const commissionerX = commissionerPoint ? commissionerPoint.x - boxW / 2 : defaultRightX;
+  const commissionerY = commissionerPoint ? commissionerPoint.y - boxH / 2 : baseY;
 
+  commissionerPage.drawText('COMMISSIONER ATTESTATION', { x: commissionerX, y: commissionerY + boxH + 6, size: 7, font: fontBold, color: MUTED });
+  commissionerPage.drawRectangle({ x: commissionerX, y: commissionerY, width: boxW, height: boxH, borderColor: LINE, borderWidth: 0.8 });
+
+  const commissionerName = request.assignedProfessionalName || 'Commissioner for Oaths';
   if (request.commissionerSignatureDataUrl && request.commissionerSignatureDataUrl.startsWith('data:image')) {
     try {
       const img = await embedImageFromDataUrl(pdfDoc, request.commissionerSignatureDataUrl);
       const dims = img.scaleToFit(boxW - 16, boxH - 14);
-      lastPage.drawImage(img, {
-        x: rightX + (boxW - dims.width) / 2,
-        y: baseY + (boxH - dims.height) / 2,
+      commissionerPage.drawImage(img, {
+        x: commissionerX + (boxW - dims.width) / 2,
+        y: commissionerY + (boxH - dims.height) / 2,
         width: dims.width,
         height: dims.height
       });
     } catch {
-      drawCenteredText(lastPage, request.assignedProfessionalName || 'Commissioner for Oaths', rightX + boxW / 2, baseY + boxH / 2 - 4, 11, font);
+      drawCenteredText(commissionerPage, commissionerName, commissionerX + boxW / 2, commissionerY + boxH / 2 - 4, 11, font);
     }
   } else {
-    drawCenteredText(lastPage, request.assignedProfessionalName || 'Commissioner for Oaths', rightX + boxW / 2, baseY + boxH / 2 - 4, 11, font);
+    drawCenteredText(commissionerPage, commissionerName, commissionerX + boxW / 2, commissionerY + boxH / 2 - 4, 11, font);
   }
-  const commissionerName = request.assignedProfessionalName || 'Commissioner for Oaths';
-  lastPage.drawText(commissionerName, { x: rightX, y: baseY - 12, size: 8, font: fontBold, color: INK });
-  lastPage.drawText(`Sealed • ${formatDate(request.commissionerSignedAt)}`, { x: rightX, y: baseY - 23, size: 6.5, font, color: MUTED });
+  commissionerPage.drawText(commissionerName, { x: commissionerX, y: commissionerY - 12, size: 8, font: fontBold, color: INK });
+  commissionerPage.drawText(`Sealed • ${formatDate(request.commissionerSignedAt)}`, { x: commissionerX, y: commissionerY - 23, size: 6.5, font, color: MUTED });
 
-  // Digital stamp, to the left of the commissioner's box (won't collide with the seal-serial text above)
-  drawDigitalStamp(lastPage, font, fontBold, rightX - 30, baseY + boxH / 2, 26, request);
+  // Digital stamp, just to the left of the commissioner's box, on whichever
+  // page that box ended up on.
+  const stampCx = Math.max(30, commissionerX - 30);
+  drawDigitalStamp(commissionerPage, font, fontBold, stampCx, commissionerY + boxH / 2, 26, request);
 }
 
 /**
