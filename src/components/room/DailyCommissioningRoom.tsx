@@ -53,7 +53,7 @@ import { ExecutionMethod } from '../../types';
 import { BrandLogo } from '../common/BrandLogo';
 import { UserAvatar } from '../common/UserAvatar';
 import { PlatformFeeSheet } from '../payment/PlatformFeeSheet';
-import { downloadCertifiedInstrumentPdf } from '../../services/pdfService';
+import { downloadFinalInstrumentPdf } from '../../services/pdfOverlayService';
 
 export const DailyCommissioningRoom: React.FC = () => {
   const { 
@@ -1801,6 +1801,46 @@ export const DailyCommissioningRoom: React.FC = () => {
             {/* STAGE 10: Commissioner Signing */}
             {isCommissioner && ceremonyStep === 10 && (
               <div className="space-y-4">
+                {currentUser.signatureDataUrl && currentUser.signatureDataUrl.trim().length > 0 && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setCommissionerSignData(currentUser.signatureDataUrl!);
+                        updateCommissioningRequest(activeRequest.id, {
+                          commissionerSignatureDataUrl: currentUser.signatureDataUrl,
+                          commissionerSignedAt: new Date().toISOString()
+                        }, {
+                          eventType: 'COMMISSIONER_SIGNED',
+                          details: 'Commissioner executed the instrument using a saved electronic signature.'
+                        });
+                        handleNextStep(11);
+                      }}
+                      className="w-full p-4 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-between group hover:bg-blue-100 transition-all cursor-pointer"
+                      id="btn-use-saved-commissioner-signature"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-white border border-blue-100 flex items-center justify-center overflow-hidden">
+                          <img src={currentUser.signatureDataUrl} alt="Saved" className="max-w-[80%] max-h-[80%] object-contain" />
+                        </div>
+                        <div className="text-left">
+                          <div className="text-xs font-bold text-blue-900 uppercase">USE SAVED SIGNATURE</div>
+                          <div className="text-[10px] text-blue-600">Statutory preference</div>
+                        </div>
+                      </div>
+                      <CheckCircle2 className="w-5 h-5 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </button>
+
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                        <div className="w-full border-t border-slate-200"></div>
+                      </div>
+                      <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-widest">
+                        <span className="bg-white px-2 text-slate-400">OR DRAW NEW</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+
                 <SignatureCanvas
                   signerName={activeRequest.assignedProfessionalName || 'Adv. Kajubi Lovelock'}
                   roleLabel="Commissioner for Oaths"
@@ -1969,7 +2009,7 @@ export const DailyCommissioningRoom: React.FC = () => {
                   <button
                     onClick={async () => {
                       try {
-                        await downloadCertifiedInstrumentPdf(activeRequest);
+                        await downloadFinalInstrumentPdf(activeRequest);
                       } catch (e) {
                         setAuditModalTab('instrument');
                         setShowAuditModal(true);

@@ -1,0 +1,220 @@
+import { PDFDocument, PDFPage, PDFFont, StandardFonts, rgb } from 'pdf-lib';
+import { CommissioningRequest } from '../types';
+import { buildCertifiedInstrumentPdf, downloadCertifiedInstrumentPdf } from './pdfService';
+
+/**
+ * Real "Fill & Sign" style finishing: takes the ACTUAL uploaded PDF bytes and
+ * places the deponent's and commissioner's signatures (and the commissioner's
+ * digital stamp) directly onto the document's own last page — the original
+ * content is never redrawn or replaced, only marked up, exactly like Adobe
+ * Fill & Sign. A WALAYI verification page (QR code, hash digests, statutory
+ * citations — reusing the existing jsPDF-built certificate page) is appended
+ * after the original pages so the instrument still carries independently
+ * verifiable metadata.
+ *
+ * This only works when the source file was a real PDF (rawFileUrl +
+ * originalMimeType === 'application/pdf'); pdf-lib has no way to parse a
+ * .doc/.docx. For anything else, callers should fall back to the synthetic
+ * certificate PDF (downloadCertifiedInstrumentPdf in pdfService.ts).
+ */
+
+const INK = rgb(0x0f / 255, 0x17 / 255, 0x2a / 255);
+const MUTED = rgb(0x64 / 255, 0x74 / 255, 0x8b / 255);
+const LINE = rgb(0xcb / 255, 0xd5 / 255, 0xe1 / 255);
+
+async function fetchBytes(url: string): Promise<ArrayBuffer> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch original document (HTTP ${res.status})`);
+  }
+  return res.arrayBuffer();
+}
+
+function dataUrlToBytes(dataUrl: string): Uint8Array {
+  const base64 = dataUrl.split(',')[1] || '';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+async function embedImageFromDataUrl(pdfDoc: PDFDocument, dataUrl: string) {
+  const bytes = dataUrlToBytes(dataUrl);
+  return dataUrl.includes('image/jpeg') || dataUrl.includes('image/jpg')
+    ? pdfDoc.embedJpg(bytes)
+    : pdfDoc.embedPng(bytes);
+}
+
+function drawCenteredText(page: PDFPage, text: string, cx: number, y: number, size: number, font: PDFFont, color = INK) {
+  const w = font.widthOfTextAtSize(text, size);
+  page.drawText(text, { x: cx - w / 2, y, size, font, color });
+}
+
+/** Draws the commissioner's official digital stamp — a round dual-ring seal. */
+function drawDigitalStamp(
+  page: PDFPage,
+  font: PDFFont,
+  fontBold: PDFFont,
+  cx: number,
+  cy: number,
+  radius: number,
+  request: CommissioningRequest
+) {
+  page.drawCircle({ x: cx, y: cy, size: radius, borderColor: INK, borderWidth: 1.4, color: undefined });
+  page.drawCircle({ x: cx, y: cy, size: radius - 5, borderColor: INK, borderWidth: 0.7, color: undefined });
+
+  drawCenteredText(page, 'COMMISSIONER', cx, cy + 11, 6, fontBold);
+  drawCenteredText(page, 'FOR OATHS', cx, cy + 4, 6, fontBold);
+  drawCenteredText(page, 'REPUBLIC OF UGANDA', cx, cy - 6, 4.5, font, MUTED);
+  const serial = request.commissionerSealSerial || `UG-CFO-${new Date().getFullYear()}-${request.certificateNumber.slice(-4)}`;
+  drawCenteredText(page, serial, cx, cy - 13, 4.5, font, MUTED);
+}
+
+const formatDate = (iso?: string): string => {
+  const d = iso ? new Date(iso) : new Date();
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+};
+
+/**
+ * Places both parties' signatures — reusing whatever is already stored on
+ * the request (which itself comes from either a fresh capture or, when
+ * available, each party's saved profile signature) — plus the commissioner's
+ * digital stamp, directly onto the real document's last page.
+ */
+async function placeSignaturesOnOriginal(pdfDoc: PDFDocument, request: CommissioningRequest) {
+  const pages = pdfDoc.getPages();
+  const lastPage = pages[pages.length - 1];
+  const { width } = lastPage.getSize();
+
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const boxW = 190;
+  const boxH = 46;
+  const baseY = 86;
+  const leftX = 48;
+  const rightX = width - 48 - boxW;
+
+  // --- Deponent's designated provision (bottom-left) ---
+  lastPage.drawText('DEPONENT SIGNATURE', { x: leftX, y: baseY + boxH + 6, size: 7, font: fontBold, color: MUTED });
+  lastPage.drawRectangle({ x: leftX, y: baseY, width: boxW, height: boxH, borderColor: LINE, borderWidth: 0.8 });
+
+  const isThumb = request.deponentExecutionMethod === 'THUMBPRINT';
+  const deponentAsset = isThumb ? request.deponentThumbprintDataUrl : request.deponentSignatureDataUrl;
+  if (deponentAsset && deponentAsset.startsWith('data:image')) {
+    try {
+      const img = await embedImageFromDataUrl(pdfDoc, deponentAsset);
+      const dims = img.scaleToFit(boxW - 16, boxH - 14);
+      lastPage.drawImage(img, {
+        x: leftX + (boxW - dims.width) / 2,
+        y: baseY + (boxH - dims.height) / 2,
+        width: dims.width,
+        height: dims.height
+      });
+    } catch {
+      drawCenteredText(lastPage, request.deponentName, leftX + boxW / 2, baseY + boxH / 2 - 4, 11, font);
+    }
+  } else {
+    drawCenteredText(lastPage, request.deponentName, leftX + boxW / 2, baseY + boxH / 2 - 4, 11, font);
+  }
+  lastPage.drawText(request.deponentName, { x: leftX, y: baseY - 12, size: 8, font: fontBold, color: INK });
+  lastPage.drawText(
+    `${isThumb ? 'Thumbprint' : 'Signature'} • ${formatDate(request.deponentSignedAt)}`,
+    { x: leftX, y: baseY - 23, size: 6.5, font, color: MUTED }
+  );
+
+  // --- Commissioner's designated provision (bottom-right) ---
+  lastPage.drawText('COMMISSIONER ATTESTATION', { x: rightX, y: baseY + boxH + 6, size: 7, font: fontBold, color: MUTED });
+  lastPage.drawRectangle({ x: rightX, y: baseY, width: boxW, height: boxH, borderColor: LINE, borderWidth: 0.8 });
+
+  if (request.commissionerSignatureDataUrl && request.commissionerSignatureDataUrl.startsWith('data:image')) {
+    try {
+      const img = await embedImageFromDataUrl(pdfDoc, request.commissionerSignatureDataUrl);
+      const dims = img.scaleToFit(boxW - 16, boxH - 14);
+      lastPage.drawImage(img, {
+        x: rightX + (boxW - dims.width) / 2,
+        y: baseY + (boxH - dims.height) / 2,
+        width: dims.width,
+        height: dims.height
+      });
+    } catch {
+      drawCenteredText(lastPage, request.assignedProfessionalName || 'Commissioner for Oaths', rightX + boxW / 2, baseY + boxH / 2 - 4, 11, font);
+    }
+  } else {
+    drawCenteredText(lastPage, request.assignedProfessionalName || 'Commissioner for Oaths', rightX + boxW / 2, baseY + boxH / 2 - 4, 11, font);
+  }
+  const commissionerName = request.assignedProfessionalName || 'Commissioner for Oaths';
+  lastPage.drawText(commissionerName, { x: rightX, y: baseY - 12, size: 8, font: fontBold, color: INK });
+  lastPage.drawText(`Sealed • ${formatDate(request.commissionerSignedAt)}`, { x: rightX, y: baseY - 23, size: 6.5, font, color: MUTED });
+
+  // Digital stamp, to the left of the commissioner's box (won't collide with the seal-serial text above)
+  drawDigitalStamp(lastPage, font, fontBold, rightX - 30, baseY + boxH / 2, 26, request);
+}
+
+/**
+ * Builds the final signed instrument: the deponent's real uploaded PDF, with
+ * both signatures and the commissioner's digital stamp placed on its last
+ * page, plus an appended WALAYI verification page. Throws if the request
+ * has no overlayable original (caller should fall back to the synthetic
+ * certificate PDF in that case).
+ */
+export async function buildSignedOriginalInstrument(request: CommissioningRequest): Promise<Uint8Array> {
+  if (!request.rawFileUrl || request.originalMimeType !== 'application/pdf') {
+    throw new Error('NO_OVERLAYABLE_ORIGINAL');
+  }
+
+  const originalBytes = await fetchBytes(request.rawFileUrl);
+  const pdfDoc = await PDFDocument.load(originalBytes, { ignoreEncryption: true });
+
+  await placeSignaturesOnOriginal(pdfDoc, request);
+
+  // Append the existing verification/certificate page (QR, hash digests,
+  // statutory citations) so the instrument keeps independently verifiable
+  // metadata alongside the real, unmodified original content.
+  try {
+    const certPdf = await buildCertifiedInstrumentPdf(request);
+    const certBytes = certPdf.output('arraybuffer') as ArrayBuffer;
+    const certDoc = await PDFDocument.load(certBytes);
+    const [certPage] = await pdfDoc.copyPages(certDoc, [0]);
+    pdfDoc.addPage(certPage);
+  } catch (e) {
+    // The signed original is still valid and complete without the
+    // verification page — never let this sink the whole download.
+    console.warn('Could not append verification page to signed instrument:', e);
+  }
+
+  return pdfDoc.save();
+}
+
+function triggerPdfDownload(bytes: Uint8Array, fileName: string) {
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Single entry point every "download the final document" action should
+ * call. Prefers the real overlay-onto-original result; transparently falls
+ * back to the synthetic certificate PDF when the source wasn't a PDF (or
+ * anything about the overlay fails), so a download never simply breaks.
+ */
+export async function downloadFinalInstrumentPdf(request: CommissioningRequest): Promise<void> {
+  const code = request.securityNumber || request.certificateNumber;
+  const safe = String(code).replace(/[^a-zA-Z0-9_-]/g, '_');
+
+  try {
+    const bytes = await buildSignedOriginalInstrument(request);
+    triggerPdfDownload(bytes, `WALAYI_Certified_Instrument_${safe}.pdf`);
+  } catch (e: any) {
+    if (e?.message !== 'NO_OVERLAYABLE_ORIGINAL') {
+      console.warn('Signed-original instrument build failed, falling back to certificate PDF:', e?.message);
+    }
+    await downloadCertifiedInstrumentPdf(request);
+  }
+}

@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { OfficialSeal } from './OfficialSeal';
 import QRCode from 'qrcode';
-import { downloadCertifiedInstrumentPdf } from '../../services/pdfService';
+import { downloadFinalInstrumentPdf } from '../../services/pdfOverlayService';
 
 interface AuditCertificateModalProps {
   request: CommissioningRequest;
@@ -52,12 +52,13 @@ export const AuditCertificateModal: React.FC<AuditCertificateModalProps> = ({
     window.print();
   };
 
-  // Always produce a real PDF file for the certified instrument, regardless of
-  // whether the original uploaded document was a PDF or a Word file.
+  // Prefers the real uploaded document with signatures placed on its own
+  // pages (Fill & Sign style); falls back to a synthesized certificate PDF
+  // when the source wasn't a PDF WALAYI can overlay onto.
   const handleDownloadPdf = async () => {
     setIsGeneratingPdf(true);
     try {
-      await downloadCertifiedInstrumentPdf(request);
+      await downloadFinalInstrumentPdf(request);
     } catch (err) {
       console.warn('Certified PDF generation failed, falling back to print dialog:', err);
       window.print();

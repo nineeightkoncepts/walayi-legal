@@ -320,6 +320,12 @@ export interface CommissioningRequest {
   completedAt?: string;
 
   rawFileUrl?: string;
+  // The real MIME type of the uploaded file at rawFileUrl. Only when this is
+  // exactly 'application/pdf' can the final instrument be built by overlaying
+  // signatures directly onto the original document's own pages (pdf-lib can't
+  // parse .doc/.docx) — otherwise the system falls back to a freshly composed
+  // certificate PDF that doesn't carry the original file's content.
+  originalMimeType?: string;
   documentContent?: string;
   fileName: string;
   fileSizeKb: number;

@@ -40,6 +40,8 @@ import {
   Info
 } from 'lucide-react';
 import { getStatutoryOathText } from '../../services/juratService';
+import { computeSha256 } from '../../services/hashService';
+import { uploadCommissioningDocument } from '../../services/documentStorageService';
 import { checkCommissionerConflict, ConflictCheckResult } from '../../utils/conflictValidation';
 import { UserAvatar } from '../common/UserAvatar';
 import { PlatformFeeSheet } from '../payment/PlatformFeeSheet';
@@ -51,17 +53,24 @@ const ACCEPTED_DOCUMENT_FORMATS =
   '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 export const NewCommissioningModal: React.FC = () => {
-  const { 
-    currentUser, 
-    users, 
+  const {
+    currentUser,
+    users,
     preselectedCommissionerId,
-    createCommissioningRequest, 
-    executePayment, 
-    setActiveCommissioningId, 
+    createCommissioningRequest,
+    updateCommissioningRequest,
+    executePayment,
+    setActiveCommissioningId,
     setCurrentView,
     platformFeePercentage,
     addNotification
   } = useApp();
+
+  // Holds the actual selected File so the real bytes can be uploaded once the
+  // request is created (and so the SHA-256 below is a genuine content hash,
+  // not a hash of the filename/size). Kept in a ref, not state — the File
+  // object itself never needs to trigger a re-render.
+  const documentFileRef = useRef<File | null>(null);
 
   // Wizard Step: 1 = Document & Deponent, 2 = Commissioner Selection, 3 = Escrow & Payment, 4 = Ready
   const [step, setStep] = useState<number>(1);
@@ -154,27 +163,23 @@ export const NewCommissioningModal: React.FC = () => {
   const platformFeeUGX = WALAYI_PLATFORM_FEE_UGX;
   const totalAmountUGX = subtotalUGX + platformFeeUGX;
 
-  // Cryptographic hashing helper
-  const computeSha256 = async (str: string) => {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(str);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  };
-
   const processSelectedFile = async (file: File) => {
+    documentFileRef.current = file;
     setFileName(file.name);
     setFileSizeKb(Math.round(file.size / 1024));
     setIsHashing(true);
-    
+
     if (!documentTitle) {
       const cleanName = file.name.replace(/\.(pdf|docx?|doc)$/i, '').replace(/[-_]/g, ' ');
       setDocumentTitle(cleanName || (documentType === 'affidavit_general' ? 'Sworn Affidavit' : documentType === 'statutory_declaration' ? 'Statutory Declaration' : 'Legal Instrument'));
     }
 
-    const textSample = `${file.name}-${file.size}-${Date.now()}`;
-    const hash = await computeSha256(textSample);
+    // A genuine content hash of the actual file bytes — this is what makes
+    // the public verification portal's "re-upload to verify" feature able
+    // to actually match, and what confirms the final signed instrument
+    // really is built from this exact file.
+    const buffer = await file.arrayBuffer();
+    const hash = await computeSha256(buffer);
     setSha256Hash(hash);
     setIsHashing(false);
   };
@@ -207,6 +212,7 @@ export const NewCommissioningModal: React.FC = () => {
   };
 
   const handleClearFile = () => {
+    documentFileRef.current = null;
     setFileName('');
     setFileSizeKb(0);
     setSha256Hash('');
@@ -220,8 +226,8 @@ export const NewCommissioningModal: React.FC = () => {
       const file = e.target.files[0];
       setNewAnnexureFile(file);
       setIsHashingAnnexure(true);
-      const textSample = `${file.name}-${file.size}-${Date.now()}`;
-      const hash = await computeSha256(textSample);
+      const buffer = await file.arrayBuffer();
+      const hash = await computeSha256(buffer);
       setNewAnnexureSha256(hash);
       setIsHashingAnnexure(false);
     }
@@ -363,6 +369,24 @@ export const NewCommissioningModal: React.FC = () => {
       setIsProcessingPayment(false);
       setActiveCommissioningId(createdReq.id);
       setStep(4); // Completion
+
+      // Upload the real document bytes now that the request has an id to
+      // key the storage path on. Non-blocking: the request already exists
+      // and is usable even if this fails (falls back to the synthetic
+      // certificate PDF at signing time) or is still in flight.
+      const fileToUpload = documentFileRef.current;
+      if (fileToUpload) {
+        uploadCommissioningDocument(createdReq.id, fileToUpload)
+          .then(({ url, mimeType }) => {
+            updateCommissioningRequest(createdReq.id, {
+              rawFileUrl: url,
+              originalMimeType: mimeType
+            });
+          })
+          .catch(err => {
+            console.warn('Original document upload notice:', err?.message);
+          });
+      }
     } catch (err) {
       console.error(err);
       setIsProcessingPayment(false);
