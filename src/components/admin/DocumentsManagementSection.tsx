@@ -53,10 +53,7 @@ export const DocumentsManagementSection: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono-code font-bold bg-blue-50 text-blue-700 border border-blue-200">
-              IMMUTABLE STATUTORY ARCHIVE
-            </span>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono-code font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              ECCMIS INTEGRATION READY
+              IMMUTABLE DOCUMENT ARCHIVE
             </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-display-legal font-bold text-slate-900 mt-1">

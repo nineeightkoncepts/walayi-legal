@@ -157,17 +157,17 @@ export const VerificationPortal: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-16" id="verification-portal-container">
       
-      {/* Official Registry Header */}
+      {/* WALAYI Verification Portal Header */}
       <div className="text-center space-y-2">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 text-amber-300 text-[11px] font-bold font-mono-code tracking-wider border border-slate-700 shadow-xs">
           <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          REPUBLIC OF UGANDA • HIGH COURT STATUTORY ELECTRONIC VERIFIER
+          WALAYI PUBLIC VERIFICATION SERVICE
         </div>
         <h1 className="text-3xl sm:text-4xl font-display-legal font-bold text-[#0D1B3D] tracking-tight">
           Public Instrument Verification Portal
         </h1>
         <p className="text-xs sm:text-sm text-slate-600 max-w-2xl mx-auto leading-relaxed">
-          Statutory verification root established under Section 5 of the Electronic Transactions Act, 2011 and Rule 4 of the Electronic Commissioning Guidelines. Directly inspect instrument validity, commissioner warrant credentials, and cryptographic hash-chain integrity.
+          Independently inspect instrument validity, commissioner warrant credentials, and cryptographic hash-chain integrity for any document commissioned through WALAYI.
         </p>
       </div>
 
@@ -221,7 +221,7 @@ export const VerificationPortal: React.FC = () => {
               WAL-UG-2026-8849
             </button>
           </div>
-          <span className="text-[10px] text-slate-400 italic">ECCMIS & High Court Integrated System-of-Record</span>
+          <span className="text-[10px] text-slate-400 italic">WALAYI's own independent system-of-record</span>
         </div>
       </form>
 

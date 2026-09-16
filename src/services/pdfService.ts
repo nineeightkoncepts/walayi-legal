@@ -203,7 +203,7 @@ export async function buildCertifiedInstrumentPdf(request: CommissioningRequest)
   setText(pdf, MUTED);
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(7.5);
-  pdf.text('DEPONENT EXECUTION (CAP. 5 COMPLIANT)', leftX + 10, boxTop + 16);
+  pdf.text('DEPONENT EXECUTION', leftX + 10, boxTop + 16);
 
   const isThumb = request.deponentExecutionMethod === 'THUMBPRINT';
   const deponentAsset = isThumb ? request.deponentThumbprintDataUrl : request.deponentSignatureDataUrl;
@@ -288,7 +288,7 @@ export async function buildCertifiedInstrumentPdf(request: CommissioningRequest)
   setText(pdf, '#047857');
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(7);
-  pdf.text('CERTIFIED STATUTORY INSTRUMENT • PERMANENTLY LINKED • ECCMIS-READY', vx, y + 86);
+  pdf.text('DIGITALLY COMMISSIONED VIA WALAYI • INDEPENDENTLY VERIFIABLE', vx, y + 86);
 
   y += vbH + 18;
 
@@ -314,7 +314,7 @@ export async function buildCertifiedInstrumentPdf(request: CommissioningRequest)
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(6.5);
   pdf.text(
-    'Issued in compliance with the Commissioners for Oaths (Advocates) Act Cap. 5, the Electronic Signatures Act and the Electronic Transactions Act, 2011 (Uganda).',
+    'WALAYI provides a technology-enabled workflow for commissioning documents. Users remain responsible for ensuring that the document and commissioning process meet applicable professional, institutional and procedural requirements.',
     A4_WIDTH / 2,
     footerY,
     { align: 'center', maxWidth: CONTENT_WIDTH }

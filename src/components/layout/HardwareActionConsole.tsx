@@ -115,7 +115,7 @@ export const HardwareActionConsole: React.FC<HardwareActionConsoleProps> = () =>
       badge: `${totalDocuments} Records`,
       icon: FileText,
       color: 'indigo',
-      description: 'Access sworn affidavits, certificates with QR codes, SHA-256 logs & ECCMIS filings.'
+      description: 'Access sworn affidavits, certificates with QR codes, and SHA-256 audit logs.'
     },
     {
       id: 'verify-portal',

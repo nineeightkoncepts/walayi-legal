@@ -240,43 +240,49 @@ export const CredentialVerificationQueue: React.FC = () => {
             </div>
 
             <div className="p-6 space-y-4 overflow-y-auto">
-              {/* Visual simulated certificate rendering */}
+              {/* Illustrative layout only — not a rendering of the uploaded document */}
               <div className="p-6 rounded-2xl bg-amber-50/40 border border-amber-200 text-center space-y-3">
+                <span className="inline-block px-2 py-0.5 rounded text-[9px] font-mono-code font-bold bg-amber-200/70 text-amber-900 uppercase tracking-wider">
+                  Sample layout — inspect the actual uploaded file separately
+                </span>
                 <div className="w-12 h-12 mx-auto rounded-full bg-amber-100 flex items-center justify-center text-amber-800">
                   <Scale className="w-6 h-6" />
                 </div>
                 <div>
                   <h4 className="font-display-legal font-bold text-base text-slate-900 uppercase">
-                    THE REPUBLIC OF UGANDA
+                    Practitioner Warrant / Credential
                   </h4>
                   <p className="text-[11px] text-slate-500 font-serif">
-                    IN THE HIGH COURT OF UGANDA AT KAMPALA
+                    Statutory basis and appointing authority as declared by the practitioner
                   </p>
                 </div>
                 <div className="p-3 bg-white rounded-xl border border-amber-100 font-mono-code text-[11px] text-slate-800">
-                  WARRANT TO COMMISSION OATHS (CAP. 5) • APPOINTEE: {selectedDoc.doc.licenseNumber || 'ADV-2026/088'}
+                  Declared licence / reference: {selectedDoc.doc.licenseNumber || 'Not provided'}
                 </div>
               </div>
 
               {/* Statutory verification checklist */}
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
                 <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                  Mandatory Statutory Checklist:
+                  Before approving, manually confirm:
                 </div>
                 <div className="space-y-1.5 text-slate-700">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Chief Justice Commission Seal and signature verified</span>
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>The Chief Justice Commission seal and signature on the uploaded document are genuine</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Practising Certificate 2026 verified on ULS / Law Council database</span>
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>The practising certificate is current and checked against the Law Council roll</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>High Court Roll Number cross-referenced against Uganda Gazette</span>
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>The High Court roll number is checked against the Uganda Gazette</span>
                   </div>
                 </div>
+                <p className="text-[10px] text-slate-400 pt-1">
+                  WALAYI does not automatically verify these against any external register — this remains a manual review step.
+                </p>
               </div>
             </div>
 

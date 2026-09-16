@@ -57,7 +57,7 @@ export const DocumentsView: React.FC = () => {
             My Documents & Commissioning Records
           </h1>
           <p className="text-xs text-slate-500 max-w-xl leading-relaxed">
-            Inspect sworn affidavits, statutory declarations, cryptographic audit trails, and certificates ready for ECCMIS filing.
+            Inspect sworn affidavits, statutory declarations, cryptographic audit trails, and independently verifiable commissioning certificates.
           </p>
         </div>
 

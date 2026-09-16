@@ -1140,8 +1140,8 @@ export const ProfileAccountModal: React.FC<ProfileAccountModalProps> = ({
             <div className="flex items-center gap-2.5">
               <BookOpen className="w-4 h-4 text-amber-400" />
               <div>
-                <div className="text-xs font-bold">Uganda Statutory Framework & Cap. 5 Mandate</div>
-                <div className="text-[11px] text-slate-400">Review full statutory compliance and enactments</div>
+                <div className="text-xs font-bold">Legal & Regulatory Context</div>
+                <div className="text-[11px] text-slate-400">What WALAYI is, and the Acts relevant to commissioning in Uganda</div>
               </div>
             </div>
             {onOpenAboutLegal && (

@@ -680,13 +680,13 @@ export const DailyCommissioningRoom: React.FC = () => {
 
           <div className="space-y-1">
             <span className="text-[10px] font-mono-code font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
-              STATUTORY PAYMENT GATE • COMMISSIONING ROOM LOCKED
+              PAYMENT GATE • COMMISSIONING ROOM LOCKED
             </span>
             <h2 className="text-xl font-display-legal font-bold text-[#0D1B3D]">
               Escrow Deposit Required Before Convening Oath
             </h2>
             <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
-              Under Cap. 5 Laws of Uganda & Electronic Transactions Act 2011, commissioning fees must be locked in statutory escrow prior to convening the live video ceremony.
+              WALAYI requires commissioning fees to be locked in escrow before the live video ceremony can begin, so that funds are confirmed before either party's time is committed.
             </p>
           </div>
         </div>
@@ -1251,7 +1251,7 @@ export const DailyCommissioningRoom: React.FC = () => {
                      ceremonyStep === 11 ? '11. Apply Official Seal & Statutory Stamp' :
                      ceremonyStep === 12 ? '12. Generate Statutory Jurat' :
                      ceremonyStep === 13 ? '13. Mint Evidentiary Verification Certificate' :
-                     '14. Ceremony Completed & ECCMIS Ready'}
+                     '14. Ceremony Completed'}
                   </h3>
                 </div>
 
@@ -1395,11 +1395,11 @@ export const DailyCommissioningRoom: React.FC = () => {
                       className="text-[11px] text-blue-700 hover:text-blue-900 font-bold underline flex items-center gap-1 cursor-pointer"
                     >
                       <Key className="w-3 h-3 text-amber-600" />
-                      Daily.co & MTN MoMo API Settings
+                      Video & Payment Gateway Settings
                     </button>
                   </div>
                   <div className="text-[11px] text-slate-600">
-                    Video feed is encrypted and certified for statutory compliance under the Commissioners for Oaths Act (Cap 5) and Electronic Transactions Act 2011.
+                    Video feed is end-to-end encrypted for this session.
                   </div>
                 </div>
 
@@ -1973,7 +1973,7 @@ export const DailyCommissioningRoom: React.FC = () => {
               </div>
             )}
 
-            {/* STAGE 14: Completed & ECCMIS Ready */}
+            {/* STAGE 14: Completed */}
             {ceremonyStep === 14 && (
               <div className="space-y-4 text-center">
                 <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-200">
@@ -1985,7 +1985,7 @@ export const DailyCommissioningRoom: React.FC = () => {
                     Affidavit Commissioned Successfully!
                   </h3>
                   <div className="text-xs font-bold text-emerald-700 uppercase tracking-wider pt-1">
-                    ✓ READY FOR ELECTRONIC COURT FILING (ECCMIS)
+                    ✓ INDEPENDENTLY VERIFIABLE CERTIFICATE ISSUED
                   </div>
                 </div>
 

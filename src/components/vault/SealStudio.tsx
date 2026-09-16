@@ -163,7 +163,7 @@ export const SealStudio: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 leading-relaxed">
-                  Default statutory double-ring layout compliant with the Commissioners for Oaths Act.
+                  Default double-ring layout in the conventional Commissioner for Oaths stamp style.
                 </p>
               </button>
 

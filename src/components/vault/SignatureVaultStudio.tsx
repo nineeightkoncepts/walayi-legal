@@ -75,7 +75,7 @@ export const SignatureVaultStudio: React.FC = () => {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-xs font-mono-code border border-blue-500/30">
             <Lock className="w-3.5 h-3.5 text-blue-400" />
-            UGANDA ELECTRONIC SIGNATURES ACT COMPLIANT
+            HASHED & CRYPTOGRAPHICALLY SEALED
           </div>
           <span className="text-xs text-slate-400 font-mono-code">
             Practitioner: <strong className="text-white">{currentUser.fullName}</strong>

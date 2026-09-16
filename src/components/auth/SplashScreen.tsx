@@ -51,11 +51,8 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete, autoDism
             WALAYI
           </h1>
           <p className="text-sm text-slate-300 font-sans tracking-wide">
-            Uganda National Digital Oath & Commissioning Platform
+            Digital Oath & Commissioning Workflow for Uganda
           </p>
-          <div className="text-[11px] font-mono-code text-blue-400">
-            Cap. 5 (Commissioners for Oaths) • Electronic Transactions Act 2011
-          </div>
         </div>
 
         {/* Vision & Power Statement Banner Cards */}
@@ -88,7 +85,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete, autoDism
       {/* Footer minimal tag */}
       <div className="absolute bottom-6 text-[10px] text-slate-500 font-mono-code flex items-center gap-1.5">
         <ShieldCheck className="w-3 h-3 text-emerald-500" />
-        Secured Cryptographic Legal Infrastructure • Republic of Uganda
+        Secured with cryptographic audit trails
       </div>
     </div>
   );

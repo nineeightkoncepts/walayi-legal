@@ -102,7 +102,7 @@ export const MasterAdminShieldConsole: React.FC<MasterAdminShieldConsoleProps> =
     { 
       id: 'DOCUMENTS', 
       label: 'Document Archive & Hashes', 
-      description: 'Cryptographic SHA-256 records & ECCMIS court filings', 
+      description: 'Cryptographic SHA-256 records & audit trail',
       icon: FileText,
       badge: requests.length,
       badgeColor: 'blue'

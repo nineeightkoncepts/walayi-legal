@@ -1390,7 +1390,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     ];
 
     if (requiresEscrowStatuses.includes(nextStatus) && !isEscrowConfirmed) {
-      throw new Error(`Critical Path Violation: Cannot transition to ${nextStatus}. Escrowed payment is mandatory under Cap. 5 & Advocates Act.`);
+      throw new Error(`Critical Path Violation: Cannot transition to ${nextStatus}. WALAYI requires confirmed escrow payment before commissioning can proceed.`);
     }
 
     // Critical Path Sequential Transition Validation

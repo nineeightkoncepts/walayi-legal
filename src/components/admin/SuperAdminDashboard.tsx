@@ -64,10 +64,10 @@ export const SuperAdminDashboard: React.FC = () => {
         <div className="space-y-1">
           <div className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 font-mono-code px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200">
             <Scale className="w-3.5 h-3.5 text-blue-600" />
-            UGANDA JUDICIAL & STATUTORY COMPLIANCE CONSOLE
+            PLATFORM ADMINISTRATION CONSOLE
           </div>
           <h1 className="text-2xl font-display-legal font-bold text-slate-900">
-            Super Administrator & Law Council Review Desk
+            Super Administrator & Professional Review Desk
           </h1>
           <p className="text-xs text-slate-500 max-w-xl leading-relaxed">
             Oversee practitioner credential validations, monitor statutory ceremony audits, inspect SHA-256 hashes, and configure national escrow fees.

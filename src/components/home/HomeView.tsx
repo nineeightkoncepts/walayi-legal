@@ -312,9 +312,9 @@ export const HomeView: React.FC = () => {
                     4
                   </div>
                   <div>
-                    <h4 className="font-bold text-slate-900">Digital Jurat & Court-Ready PDF</h4>
+                    <h4 className="font-bold text-slate-900">Digital Jurat & Finalised PDF</h4>
                     <p className="text-slate-600 mt-0.5 leading-relaxed">
-                      Both parties sign on canvas. The electronic jurat, official seal, and ECCMIS-ready audit certificate are generated instantly.
+                      Both parties sign on canvas. The electronic jurat, official seal, and independently verifiable audit certificate are generated instantly.
                     </p>
                   </div>
                 </div>

@@ -96,7 +96,7 @@ export const PlatformOverviewSection: React.FC = () => {
             System 100% Operational
           </span>
           <span className="px-2.5 py-1 rounded-lg text-xs font-mono-code font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-            ECCMIS & URSB Compliant
+            Audit Trail Active
           </span>
         </div>
 

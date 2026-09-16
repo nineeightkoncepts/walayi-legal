@@ -125,7 +125,7 @@ export const AuditCertificateModal: React.FC<AuditCertificateModalProps> = ({
               id="btn-tab-certified-instrument"
             >
               <FileText className="w-3.5 h-3.5 text-blue-600" />
-              <span>Legal Instrument (ECCMIS)</span>
+              <span>Legal Instrument</span>
             </button>
 
             <button
@@ -199,7 +199,7 @@ export const AuditCertificateModal: React.FC<AuditCertificateModalProps> = ({
                 IN THE MATTER OF THE COMMISSIONERS FOR OATHS (ADVOCATES) ACT, CAP. 5
               </div>
               <div className="text-xs text-slate-600 font-serif-legal italic">
-                IN THE MATTER OF THE STATUTORY DECLARATIONS ACT & ELECTRONIC TRANSACTIONS ACT 2011
+                COMMISSIONED THROUGH THE WALAYI DIGITAL WORKFLOW
               </div>
               <div className="text-xs font-bold text-slate-800 font-mono-code uppercase pt-1">
                 IN THE MATTER OF: {request.documentTitle.toUpperCase()}
@@ -249,7 +249,7 @@ export const AuditCertificateModal: React.FC<AuditCertificateModalProps> = ({
               {/* Left Column: Deponent Execution */}
               <div className="space-y-3 p-4 rounded-2xl bg-slate-50 border border-slate-200">
                 <span className="text-[10px] font-mono-code font-bold uppercase tracking-wider text-slate-500">
-                  DEPONENT EXECUTION (CAP. 5 COMPLIANT)
+                  DEPONENT EXECUTION
                 </span>
                 
                 <div className="h-24 bg-white rounded-xl border border-dashed border-slate-300 flex items-center justify-center p-2">
@@ -323,7 +323,7 @@ export const AuditCertificateModal: React.FC<AuditCertificateModalProps> = ({
 
             </div>
 
-            {/* Official Security & ECCMIS Certification Box */}
+            {/* Security Number & verification box */}
             <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 {qrDataUrl && (
@@ -343,15 +343,13 @@ export const AuditCertificateModal: React.FC<AuditCertificateModalProps> = ({
                   </div>
                   <div className="text-[10px] font-bold text-emerald-800 flex items-center gap-1">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    CERTIFIED STATUTORY INSTRUMENT • COMPLIANT WITH UGANDA ECCMIS E-FILING
+                    DIGITALLY COMMISSIONED • INDEPENDENTLY VERIFIABLE
                   </div>
                 </div>
               </div>
 
               <div className="text-right text-[10px] text-slate-500 font-mono-code shrink-0">
-                <div>ELECTRONIC TRANSACTIONS ACT 2011</div>
-                <div>COMMISSIONERS FOR OATHS ACT CAP. 5</div>
-                <div>walayi.ug/verify</div>
+                <div>WALAYI.UG/VERIFY</div>
               </div>
             </div>
 
@@ -367,13 +365,15 @@ export const AuditCertificateModal: React.FC<AuditCertificateModalProps> = ({
             {/* Certificate Header Badge */}
             <div className="border-2 border-slate-300 rounded-xl p-6 bg-slate-50 text-center relative overflow-hidden">
               <div className="text-[10px] font-display-legal tracking-[0.25em] text-blue-700 font-bold uppercase mb-1">
-                REPUBLIC OF UGANDA • JUDICIAL INFRASTRUCTURE
+                WALAYI DIGITAL COMMISSIONING RECORD
               </div>
               <h1 className="text-2xl md:text-3xl font-display-legal font-extrabold text-slate-900 tracking-wide">
                 CERTIFICATE OF DIGITAL COMMISSIONING & OATH
               </h1>
               <p className="text-xs text-slate-600 font-serif-legal italic mt-1 max-w-xl mx-auto leading-relaxed">
-                Issued in compliance with the Commissioners for Oaths (Advocates) Act Cap. 5, Electronic Signatures Act, and Electronic Transactions Act of Uganda.
+                WALAYI provides a technology-enabled workflow for commissioning documents. Users remain
+                responsible for ensuring that the document and commissioning process meet applicable
+                professional, institutional and procedural requirements.
               </p>
 
               <div className="mt-4 inline-flex flex-wrap items-center justify-center gap-3 px-4 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800 text-xs font-mono-code">
@@ -647,7 +647,7 @@ export const AuditCertificateModal: React.FC<AuditCertificateModalProps> = ({
               </div>
             </div>
 
-            {/* Verification QR & ECCMIS Compliance Footnote */}
+            {/* Verification QR & independent-verification footnote */}
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 {qrDataUrl && qrDataUrl.trim().length > 0 ? (
@@ -668,7 +668,7 @@ export const AuditCertificateModal: React.FC<AuditCertificateModalProps> = ({
                     Scan this QR code or navigate to <span className="text-blue-600 font-mono-code">walayi.ug/verify</span> to independently inspect cryptographic verification, commissioner credentials, and SHA-256 seal integrity.
                   </p>
                   <div className="mt-1 text-[10px] font-bold text-emerald-700 uppercase tracking-wider">
-                    ✓ READY FOR ELECTRONIC COURT FILING (ECCMIS)
+                    ✓ INDEPENDENTLY VERIFIABLE
                   </div>
                 </div>
               </div>

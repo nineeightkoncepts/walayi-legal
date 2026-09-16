@@ -497,11 +497,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onVerifyInstead }) => {
 
           <div className="space-y-2">
             <p className="text-sm text-slate-300 font-sans tracking-wide">
-              Uganda National Digital Oath &amp; Commissioning Platform
+              Digital Oath &amp; Commissioning Workflow for Uganda
             </p>
-            <div className="text-[11px] font-mono-code text-blue-400">
-              Cap. 5 (Commissioners for Oaths) • Electronic Transactions Act 2011
-            </div>
           </div>
         </div>
       </div>

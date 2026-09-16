@@ -40,12 +40,12 @@ export const AboutLegalInfrastructureModal: React.FC<AboutLegalInfrastructureMod
             <div>
               <div className="flex items-center gap-2">
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono-code font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
-                  STATUTORY RECOGNITION & COMPLIANCE
+                  LEGAL & REGULATORY CONTEXT
                 </span>
                 <span className="text-[11px] font-mono-code text-slate-400">v2.6 Enterprise</span>
               </div>
               <h2 className="text-xl font-display-legal font-bold text-white tracking-wide mt-1">
-                WALAYI Uganda Legal Infrastructure
+                About WALAYI's Digital Commissioning Workflow
               </h2>
             </div>
           </div>
@@ -67,9 +67,14 @@ export const AboutLegalInfrastructureModal: React.FC<AboutLegalInfrastructureMod
           <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-100 flex items-start gap-3">
             <ShieldCheck className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
             <div className="space-y-1">
-              <h3 className="font-bold text-blue-950 text-sm">Official Platform Mandate & Legality</h3>
+              <h3 className="font-bold text-blue-950 text-sm">What WALAYI is and isn't</h3>
               <p className="text-xs text-blue-900/90 leading-relaxed">
-                WALAYI is Uganda&apos;s sovereign digital commissioning platform, purpose-engineered to bridge the gap between judicial ceremonies, remote digital execution, and statutory compliance across the Republic of Uganda.
+                WALAYI is a technology platform, operated by Enen Digital Labs, that provides a workflow for
+                remote document commissioning in Uganda. WALAYI does not itself act as a Commissioner for
+                Oaths, a notary or any other professional authority, and does not guarantee that every
+                electronically commissioned document will be accepted by every court or institution. Users
+                remain responsible for ensuring that their document and the commissioning process meet
+                applicable professional, institutional and procedural requirements.
               </p>
             </div>
           </div>
@@ -99,7 +104,7 @@ export const AboutLegalInfrastructureModal: React.FC<AboutLegalInfrastructureMod
                   <h5 className="font-bold text-xs text-slate-900">Electronic Transactions Act, 2011 (ETA 2011)</h5>
                 </div>
                 <p className="text-[11px] text-slate-600 leading-normal">
-                  Sections 5, 6, and 19 establish the full legal validity, admissibility, and enforceability of electronic records, electronic declarations, and digital signatures.
+                  Sections 5, 6 and 19 address the legal recognition of electronic records, electronic declarations and digital signatures in Uganda; applicability to a specific document remains a matter for the parties and institution concerned.
                 </p>
               </div>
 
@@ -116,10 +121,10 @@ export const AboutLegalInfrastructureModal: React.FC<AboutLegalInfrastructureMod
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5 hover:border-blue-200 transition-colors">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-blue-600" />
-                  <h5 className="font-bold text-xs text-slate-900">Judiciary Uganda ECCMIS Interoperability</h5>
+                  <h5 className="font-bold text-xs text-slate-900">Independently verifiable audit trail</h5>
                 </div>
                 <p className="text-[11px] text-slate-600 leading-normal">
-                  Documents commissioned through WALAYI generate authenticated jurats and QR certificates fully structured for electronic filing in the High Court ECCMIS system.
+                  Every commissioned document generates a jurat, QR code and Security Number that anyone can independently check on the WALAYI Verification Portal. WALAYI does not itself file documents with any court or institution, and does not guarantee acceptance by a specific court or institution's own systems.
                 </p>
               </div>
 
@@ -129,17 +134,17 @@ export const AboutLegalInfrastructureModal: React.FC<AboutLegalInfrastructureMod
                   <h5 className="font-bold text-xs text-slate-900">Advocates Act (Cap. 267) & Notaries Public Act (Cap. 53)</h5>
                 </div>
                 <p className="text-[11px] text-slate-600 leading-normal">
-                  Strict enforcement of statutory fee schedules, disciplinary audit trails, and legal authority boundaries for admitted Uganda legal practitioners.
+                  Govern the fee schedules, disciplinary standards and authority boundaries that apply independently to Uganda legal practitioners using WALAYI.
                 </p>
               </div>
 
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5 hover:border-blue-200 transition-colors">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-blue-600" />
-                  <h5 className="font-bold text-xs text-slate-900">URSB & Institutional Verification</h5>
+                  <h5 className="font-bold text-xs text-slate-900">Record-keeping for your own use</h5>
                 </div>
                 <p className="text-[11px] text-slate-600 leading-normal">
-                  Verifiable audit trails for corporate resolutions, title deed affidavits, land declarations, and banking compliance.
+                  Verifiable audit trails you can retain and present as needed for corporate resolutions, title deed affidavits, land declarations and similar purposes.
                 </p>
               </div>
 
@@ -190,7 +195,7 @@ export const AboutLegalInfrastructureModal: React.FC<AboutLegalInfrastructureMod
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 text-xs text-slate-500 shrink-0">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>Official Legal Tech Standard • Republic of Uganda</span>
+            <span>WALAYI — a technology-enabled commissioning workflow</span>
           </div>
           <button
             onClick={onClose}

@@ -126,7 +126,7 @@ export const SignatureCanvas: React.FC<SignatureCanvasProps> = ({
           </div>
         )}
         <div className="absolute bottom-1 right-2 text-[9px] text-slate-400 font-mono-code pointer-events-none">
-          Uganda Electronic Signatures Act Compliant
+          Captured as a hashed digital signature
         </div>
       </div>
 
