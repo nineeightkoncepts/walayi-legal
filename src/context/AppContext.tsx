@@ -56,7 +56,9 @@ export type AppView =
   | 'verify-portal'
   | 'lawfirm'
   | 'onboarding'
-  | 'auth';
+  | 'auth'
+  | 'privacy'
+  | 'terms';
 
 interface AppContextType {
   currentUser: UserProfile;

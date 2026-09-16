@@ -417,23 +417,23 @@ export const ProfileAccountModal: React.FC<ProfileAccountModalProps> = ({
       >
         
         {/* Modal Top Header */}
-        <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between gap-4 border-b border-slate-800 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-md">
-              <User className="w-5 h-5 stroke-[2.5]" />
+        <div className="px-4 sm:px-6 py-3 sm:py-4 bg-slate-900 text-white flex items-center justify-between gap-3 border-b border-slate-800 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-md shrink-0">
+              <User className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-bold font-display-legal text-white">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h2 className="text-sm sm:text-lg font-bold font-display-legal text-white truncate">
                   User Profile & Account Particulars
                 </h2>
                 {isMasterAdmin && (
-                  <span className="px-2 py-0.5 rounded-full text-[9px] font-mono-code font-bold bg-amber-500 text-slate-950">
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-mono-code font-bold bg-amber-500 text-slate-950 shrink-0">
                     MASTER ADMIN
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-400">
+              <p className="text-[10px] sm:text-xs text-slate-400 truncate">
                 Manage statutory identity, verifiable photograph, and chambers credentials
               </p>
             </div>
@@ -444,7 +444,7 @@ export const ProfileAccountModal: React.FC<ProfileAccountModalProps> = ({
               stopCameraStream();
               onClose();
             }}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer shrink-0"
             title="Close"
             id="btn-close-profile-modal"
           >
@@ -453,7 +453,7 @@ export const ProfileAccountModal: React.FC<ProfileAccountModalProps> = ({
         </div>
 
         {/* Scrollable Modal Content */}
-        <div className="p-6 space-y-6 overflow-y-auto flex-1 text-slate-700 text-sm">
+        <div className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1 text-slate-700 text-sm">
           
           {/* Section 1: Photograph Upload Suite (Picker vs Live Camera) */}
           <div className="p-5 rounded-3xl bg-slate-50 border border-slate-200/80 space-y-4">

@@ -252,17 +252,22 @@ export const PhotoSelectionModal: React.FC<PhotoSelectionModalProps> = ({ isOpen
   if (!isOpen) return null;
 
   return (
-    <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn"
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn overflow-y-auto"
+      style={{
+        paddingTop: 'max(1rem, env(safe-area-inset-top))',
+        paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
+      }}
       id="photo-selection-modal-backdrop"
     >
-      <div 
-        className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden flex flex-col max-h-[90vh] text-slate-900 animate-scaleUp"
+      <div
+        className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden flex flex-col my-auto text-slate-900 animate-scaleUp"
+        style={{ maxHeight: 'min(90vh, 90dvh)' }}
         id="photo-selection-modal"
       >
-        
+
         {/* Header */}
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+        <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-teal-50 text-[#0097A7] flex items-center justify-center border border-teal-200">
               <Camera className="w-4 h-4" />
@@ -289,7 +294,7 @@ export const PhotoSelectionModal: React.FC<PhotoSelectionModalProps> = ({ isOpen
         </div>
 
         {/* Tab Selector: Camera vs Image Picker */}
-        <div className="p-4 pb-0">
+        <div className="p-4 pb-0 shrink-0">
           <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200 text-xs font-bold">
             <button
               type="button"
@@ -321,7 +326,7 @@ export const PhotoSelectionModal: React.FC<PhotoSelectionModalProps> = ({ isOpen
         </div>
 
         {/* Modal Body */}
-        <div className="p-5 space-y-4 overflow-y-auto">
+        <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
           
           {/* Error Message */}
           {errorMessage && (
@@ -526,7 +531,7 @@ export const PhotoSelectionModal: React.FC<PhotoSelectionModalProps> = ({ isOpen
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 bg-slate-50/80 border-t border-slate-100 flex items-center justify-end gap-2">
+        <div className="p-4 bg-slate-50/80 border-t border-slate-100 flex items-center justify-end gap-2 shrink-0">
           <button
             type="button"
             onClick={() => {

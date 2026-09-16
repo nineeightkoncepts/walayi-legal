@@ -30,10 +30,18 @@ export type FeatureAccess = {
  * Check if a role can access a specific view/feature.
  * Used to gate navigation and render protected views.
  */
+// Views that must be reachable by anyone — signed in, signed out, any role —
+// because they are public legal disclosures, not application features.
+const PUBLIC_VIEWS = new Set(['privacy', 'terms']);
+
 export const canAccessView = (
   role: UserRole | null | undefined,
   view: string
 ): FeatureAccess => {
+  if (PUBLIC_VIEWS.has(view)) {
+    return { canAccess: true };
+  }
+
   if (!role) {
     return { canAccess: false, reason: 'Not authenticated' };
   }

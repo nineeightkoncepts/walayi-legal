@@ -22,6 +22,8 @@ import { CommissionerDashboard } from './components/commissioning/CommissionerDa
 import { CommissionerSettings } from './components/commissioner/CommissionerSettings';
 import { OfflineIndicator } from './components/common/OfflineIndicator';
 import { IncomingCallBanner } from './components/common/IncomingCallBanner';
+import { PrivacyNoticeView } from './components/legal/PrivacyNoticeView';
+import { TermsAndConditionsView } from './components/legal/TermsAndConditionsView';
 import { canAccessView, resolveAccessibleView } from './services/roleService';
 
 // Global notification toast component
@@ -115,6 +117,8 @@ const MainContent: React.FC = () => {
       {currentView === 'pro' && <ProSubscriptionView />}
       {currentView === 'onboarding' && <AuthorityOnboardingModal />}
       {currentView === 'auth' && <HomeView />}
+      {currentView === 'privacy' && <PrivacyNoticeView />}
+      {currentView === 'terms' && <TermsAndConditionsView />}
     </main>
   );
 };
