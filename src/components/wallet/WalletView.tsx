@@ -46,18 +46,42 @@ export const WalletView: React.FC = () => {
     : (currentUser.phone || '');
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
-  // Dynamic escrow calculation from actual requests in statutory custody
-  const escrowHeld = requests
-    .filter(r => r.paymentStatus === 'ESCROWED' && (
-      r.assignedProfessionalId === currentUser.id ||
-      r.assignedProfessionalName === currentUser.fullName ||
-      currentUser.role === 'super_admin'
-    ))
-    .reduce((acc, r) => acc + (r.serviceFeeUGX || 0), 0) || (currentUser.role === 'commissioner' ? 25000 : 0);
+  const isAssignedToMe = (r: typeof requests[number]) =>
+    r.assignedProfessionalId === currentUser.id ||
+    r.assignedProfessionalName === currentUser.fullName ||
+    currentUser.role === 'super_admin';
 
-  const availableBalance = (currentUser.role === 'commissioner' ? 250000 :
-                           currentUser.role === 'notary' ? 450000 :
-                           currentUser.role === 'deponent' ? 50000 : 1200000);
+  // Dynamic escrow calculation from actual requests in statutory custody —
+  // no fallback/placeholder figure, since an empty escrow is a real state,
+  // not something to be papered over with a fake number.
+  const escrowHeld = requests
+    .filter(r => r.paymentStatus === 'ESCROWED' && isAssignedToMe(r))
+    .reduce((acc, r) => acc + (r.serviceFeeUGX || 0), 0);
+
+  // Commissioner ledger: real balance derived from actual data, never a
+  // placeholder. Released = escrow that has actually been released to this
+  // commissioner on ceremony completion (see toggleProfessionalStatus /
+  // paymentStatus RELEASED transition). Withdrawn = payouts already
+  // disbursed via this wallet. Available = released minus withdrawn.
+  const releasedTotal = requests
+    .filter(r => r.paymentStatus === 'RELEASED' && isAssignedToMe(r))
+    .reduce((acc, r) => acc + (r.serviceFeeUGX || 0), 0);
+
+  const withdrawnTotal = transactions
+    .filter(t => t.userId === currentUser.id && t.type === 'PAYOUT_WITHDRAWAL' && t.status !== 'FAILED')
+    .reduce((acc, t) => acc + (t.netPayoutUGX || t.amountUGX || 0), 0);
+
+  const availableBalance = isCommissioner
+    ? Math.max(0, releasedTotal - withdrawnTotal)
+    : (currentUser.role === 'notary' ? 450000 :
+       currentUser.role === 'deponent' ? 50000 : 1200000);
+
+  // This is each signer's own wallet, not a platform-wide ledger (that's
+  // FinancialRevenueSection/OverallWalletSection in the admin console) — so
+  // it only ever shows transactions that actually belong to the signed-in
+  // user, never every user's records.
+  const isPlatformAdmin = currentUser.role === 'admin' || currentUser.role === 'master_admin' || currentUser.role === 'super_admin';
+  const myTransactions = isPlatformAdmin ? transactions : transactions.filter(t => t.userId === currentUser.id);
 
   const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,8 +169,8 @@ export const WalletView: React.FC = () => {
       </div>
 
       {/* Balance Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${isCommissioner ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4`}>
+
         <div className="p-6 rounded-2xl bg-white border border-blue-200 space-y-2 shadow-sm">
           <span className="text-xs font-semibold text-slate-500">Available Settled Balance</span>
           <div className="text-2xl sm:text-3xl font-mono-code font-extrabold text-blue-700">
@@ -168,6 +192,18 @@ export const WalletView: React.FC = () => {
           </p>
         </div>
 
+        {isCommissioner && (
+          <div className="p-6 rounded-2xl bg-white border border-slate-200 space-y-2 shadow-sm">
+            <span className="text-xs font-semibold text-slate-500">Total Withdrawn to Date</span>
+            <div className="text-2xl sm:text-3xl font-mono-code font-bold text-slate-900">
+              UGX {withdrawnTotal.toLocaleString()}
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Across all completed payout disbursements.
+            </p>
+          </div>
+        )}
+
         <div className="p-6 rounded-2xl bg-white border border-slate-200 space-y-2 shadow-sm">
           <span className="text-xs font-semibold text-slate-500">WALAYI Platform Fee</span>
           <div className="text-2xl sm:text-3xl font-mono-code font-bold text-blue-700">
@@ -185,7 +221,7 @@ export const WalletView: React.FC = () => {
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider font-mono-code flex items-center gap-2">
             <Clock className="w-4 h-4 text-blue-600" />
-            Mobile Money Ledger & Settlement Records ({transactions.length})
+            Mobile Money Ledger & Settlement Records ({myTransactions.length})
           </h2>
           <span className="text-[10px] text-slate-500 font-mono-code">Live Ugandan Shilling Ledger</span>
         </div>
@@ -205,7 +241,14 @@ export const WalletView: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
-              {transactions.map((txn) => (
+              {myTransactions.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                    No transactions on record yet.
+                  </td>
+                </tr>
+              )}
+              {myTransactions.map((txn) => (
                 <tr key={txn.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-4 py-3 font-mono-code text-blue-700 font-semibold">
                     <div>{txn.transactionRef}</div>
