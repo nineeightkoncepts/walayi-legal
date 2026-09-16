@@ -17,6 +17,8 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { isCommissionerLike } from '../../services/roleService';
+import { getPayoutDestination, lockPayoutDestinationSnapshot } from '../../services/payoutDestinationService';
+import { PayoutDestination } from '../../types';
 
 export const WalletView: React.FC = () => {
   const {
@@ -30,19 +32,28 @@ export const WalletView: React.FC = () => {
   } = useApp();
 
   const isCommissioner = isCommissionerLike(currentUser.role);
+
+  // Kept in its own private collection (not on UserProfile), so it's loaded
+  // here rather than read straight off currentUser.
+  const [payoutDestination, setPayoutDestination] = useState<PayoutDestination | null>(null);
+  useEffect(() => {
+    if (!isCommissioner || !currentUser.id || currentUser.id === 'guest-deponent') return;
+    getPayoutDestination(currentUser.id).then(setPayoutDestination);
+  }, [isCommissioner, currentUser.id]);
+
   // Commissioners must configure a deliberate Payout Destination (in
   // Commissioning Settings) before withdrawing — payouts must go to a
   // destination set up on purpose, not whatever was typed into this modal.
   // Non-commissioner roles (e.g. a deponent topping up) aren't gated by it.
-  const hasPayoutDestination = !isCommissioner || !!currentUser.payoutMsisdn;
+  const hasPayoutDestination = !isCommissioner || !!payoutDestination?.msisdn;
 
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('200000');
   const withdrawProvider = isCommissioner
-    ? (currentUser.payoutProvider || 'MTN_MOMO')
+    ? (payoutDestination?.provider || 'MTN_MOMO')
     : 'MTN_MOMO' as 'MTN_MOMO' | 'AIRTEL_MONEY';
   const withdrawPhone = isCommissioner
-    ? (currentUser.payoutMsisdn || '')
+    ? (payoutDestination?.msisdn || '')
     : (currentUser.phone || '');
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
@@ -96,19 +107,31 @@ export const WalletView: React.FC = () => {
     setIsWithdrawing(true);
 
     try {
+      // Lock the destination applicable to this transaction at the moment
+      // it's initiated — a later change to the commissioner's live payout
+      // settings can never retroactively redirect a payout already underway.
+      const locked = isCommissioner
+        ? await lockPayoutDestinationSnapshot(currentUser.id)
+        : { provider: withdrawProvider, msisdn: withdrawPhone, versionId: '' };
+      if (isCommissioner && !locked) {
+        throw new Error('No payout destination on file.');
+      }
+      const lockedProvider = locked!.provider;
+      const lockedMsisdn = locked!.msisdn;
+
       const amount = parseInt(withdrawAmount, 10);
       const disburseRes = await PaymentAdapter.disbursePayout({
         amountUGX: amount,
-        recipientMsisdn: withdrawPhone,
+        recipientMsisdn: lockedMsisdn,
         recipientName: currentUser.fullName,
         commissioningId: 'WALLET-PAYOUT',
-        provider: withdrawProvider
+        provider: lockedProvider
       });
 
       await executePayment({
         serviceFeeUGX: amount,
-        provider: withdrawProvider,
-        phoneNumber: withdrawPhone,
+        provider: lockedProvider,
+        phoneNumber: lockedMsisdn,
         purpose: 'PAYOUT_WITHDRAWAL'
       });
 
@@ -116,7 +139,7 @@ export const WalletView: React.FC = () => {
       setIsWithdrawModalOpen(false);
       addNotification(
         'Payout Processed',
-        `UGX ${amount.toLocaleString()} disbursed to your ${withdrawProvider === 'MTN_MOMO' ? 'MTN MoMo' : 'Airtel Money'} account (${withdrawPhone}). Reference: ${disburseRes.disbursementReference}`,
+        `UGX ${amount.toLocaleString()} disbursed to your ${lockedProvider === 'MTN_MOMO' ? 'MTN MoMo' : 'Airtel Money'} account (${lockedMsisdn}). Reference: ${disburseRes.disbursementReference}`,
         'PAYMENT'
       );
     } catch (err: any) {

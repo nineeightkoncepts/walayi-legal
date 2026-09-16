@@ -10,6 +10,7 @@ import {
   FileSignature,
   User,
   Smartphone,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   getCommissionerFeeSettings,
@@ -17,16 +18,15 @@ import {
   validateFees,
   createFeeSnapshot,
 } from '../../services/commissionerFeeService';
-import { CommissionerFeeModel } from '../../types';
-import { doc, setDoc } from 'firebase/firestore';
-import { db } from '../../services/firebase';
+import { getPayoutDestination, savePayoutDestination } from '../../services/payoutDestinationService';
+import { CommissionerFeeModel, PayoutDestination } from '../../types';
 
 // Uganda mobile money numbers: 07XXXXXXXX (10 digits) or +2567XXXXXXXX.
 const isValidUgandaMsisdn = (value: string): boolean =>
   /^(07\d{8}|\+2567\d{8})$/.test(value.trim());
 
 export const CommissionerSettings: React.FC = () => {
-  const { currentUser, addNotification, updateCurrentUser } = useApp();
+  const { currentUser, addNotification, logAdminAction } = useApp();
 
   // Profile & Signature Upload
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
@@ -42,18 +42,19 @@ export const CommissionerSettings: React.FC = () => {
   const [savingFees, setSavingFees] = useState(false);
 
   // Payout Destination
-  const [payoutProvider, setPayoutProvider] = useState<'MTN_MOMO' | 'AIRTEL_MONEY'>(
-    currentUser.payoutProvider || 'MTN_MOMO'
-  );
-  const [payoutMsisdn, setPayoutMsisdn] = useState(currentUser.payoutMsisdn || '');
+  const [existingPayout, setExistingPayout] = useState<PayoutDestination | null>(null);
+  const [payoutProvider, setPayoutProvider] = useState<'MTN_MOMO' | 'AIRTEL_MONEY'>('MTN_MOMO');
+  const [payoutMsisdn, setPayoutMsisdn] = useState('');
+  const [payoutAccountHolderName, setPayoutAccountHolderName] = useState('');
   const [savingPayout, setSavingPayout] = useState(false);
+  const [showPayoutConfirm, setShowPayoutConfirm] = useState(false);
 
   // UI
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [previewAnnexuresCount, setPreviewAnnexuresCount] = useState(1);
 
-  // Load existing fee settings on mount
+  // Load existing fee settings and payout destination on mount
   useEffect(() => {
     const loadFees = async () => {
       const settings = await getCommissionerFeeSettings(currentUser.id);
@@ -65,6 +66,17 @@ export const CommissionerSettings: React.FC = () => {
       }
     };
     loadFees();
+
+    const loadPayout = async () => {
+      const dest = await getPayoutDestination(currentUser.id);
+      if (dest) {
+        setExistingPayout(dest);
+        setPayoutProvider(dest.provider);
+        setPayoutMsisdn(dest.msisdn);
+        setPayoutAccountHolderName(dest.accountHolderName);
+      }
+    };
+    loadPayout();
   }, [currentUser.id]);
 
   const handleProfileImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -173,7 +185,7 @@ export const CommissionerSettings: React.FC = () => {
     }
   };
 
-  const handleSavePayoutDestination = async (e: React.FormEvent) => {
+  const handleRequestSavePayoutDestination = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
@@ -182,16 +194,40 @@ export const CommissionerSettings: React.FC = () => {
       setErrorMessage('Enter a valid mobile money number, e.g. 0771234567 or +256771234567.');
       return;
     }
+    if (!payoutAccountHolderName.trim()) {
+      setErrorMessage('Enter the account-holder name registered to this mobile money number.');
+      return;
+    }
 
+    // Changing a payout destination requires explicit confirmation — never
+    // saved directly off a form submit, since it's where a commissioner's
+    // earnings will actually be sent.
+    setShowPayoutConfirm(true);
+  };
+
+  const handleConfirmSavePayoutDestination = async () => {
+    setShowPayoutConfirm(false);
     setSavingPayout(true);
     try {
-      const updatedAt = new Date().toISOString();
-      await setDoc(
-        doc(db, 'users', currentUser.id),
-        { payoutProvider, payoutMsisdn: payoutMsisdn.trim(), payoutDestinationUpdatedAt: updatedAt },
-        { merge: true }
+      const previousMsisdn = existingPayout?.msisdn;
+      const saved = await savePayoutDestination(
+        currentUser.id,
+        payoutProvider,
+        payoutMsisdn.trim(),
+        payoutAccountHolderName.trim()
       );
-      updateCurrentUser({ payoutProvider, payoutMsisdn: payoutMsisdn.trim(), payoutDestinationUpdatedAt: updatedAt });
+      setExistingPayout(saved);
+
+      logAdminAction({
+        action: 'PAYOUT_DESTINATION_CHANGED',
+        targetType: 'USER',
+        targetId: currentUser.id,
+        targetName: currentUser.fullName,
+        previousStatus: previousMsisdn ? `${existingPayout?.provider}:${previousMsisdn}` : 'NONE',
+        newStatus: `${saved.provider}:${saved.msisdn}`,
+        reason: 'Commissioner updated their own payout destination.'
+      });
+
       setSuccessMessage('Payout destination saved. Future escrow releases will be sent here.');
       addNotification(
         'Payout Destination Saved',
@@ -357,7 +393,7 @@ export const CommissionerSettings: React.FC = () => {
         </div>
 
         {/* === SECTION 3: PAYOUT DESTINATION === */}
-        <form onSubmit={handleSavePayoutDestination}>
+        <form onSubmit={handleRequestSavePayoutDestination}>
           <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6 shadow-sm">
             <div className="flex items-start gap-3 mb-4">
               <div className="p-2 rounded-lg bg-teal-100">
@@ -366,7 +402,7 @@ export const CommissionerSettings: React.FC = () => {
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Payout Destination</h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Where your commissioning escrow releases are sent — a deliberately configured setting, separate from your contact number.
+                  Where your commissioning escrow releases are sent — a deliberately configured setting, separate from your contact number. Kept private: never shown publicly or to any other user.
                 </p>
               </div>
             </div>
@@ -411,18 +447,43 @@ export const CommissionerSettings: React.FC = () => {
                 className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-teal-600 focus:outline-hidden"
                 id="input-payout-msisdn"
               />
-              {currentUser.payoutMsisdn && currentUser.payoutDestinationUpdatedAt && (
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Currently on file: {currentUser.payoutProvider === 'AIRTEL_MONEY' ? 'Airtel Money' : 'MTN MoMo'} {currentUser.payoutMsisdn} — last updated{' '}
-                  {new Date(currentUser.payoutDestinationUpdatedAt).toLocaleDateString()}.
-                </p>
-              )}
-              {!currentUser.payoutMsisdn && (
-                <p className="text-[10px] text-amber-600 mt-1 font-semibold">
-                  No payout destination configured yet — set one before you can withdraw escrow releases.
-                </p>
-              )}
             </div>
+
+            <div className="mb-4">
+              <label className="text-xs font-bold text-slate-700 block mb-2">Registered Account-Holder Name</label>
+              <input
+                type="text"
+                value={payoutAccountHolderName}
+                onChange={(e) => setPayoutAccountHolderName(e.target.value)}
+                placeholder="Name as registered on the mobile money account"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-teal-600 focus:outline-hidden"
+                id="input-payout-account-holder"
+              />
+              <p className="text-[10px] text-slate-500 mt-1">
+                Must match the name on the mobile money account, so a payout is never sent against a mismatched name.
+              </p>
+            </div>
+
+            {existingPayout ? (
+              <div className="mb-4 p-3 rounded-lg bg-slate-50 border border-slate-200 flex items-start gap-2">
+                {existingPayout.verificationStatus === 'VERIFIED' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                ) : (
+                  <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                )}
+                <p className="text-[10px] text-slate-500">
+                  Currently on file: <strong className="text-slate-700">{existingPayout.provider === 'AIRTEL_MONEY' ? 'Airtel Money' : 'MTN MoMo'} {existingPayout.msisdn}</strong> ({existingPayout.accountHolderName}) —{' '}
+                  <span className={existingPayout.verificationStatus === 'VERIFIED' ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}>
+                    {existingPayout.verificationStatus === 'VERIFIED' ? 'Verified' : 'Unverified'}
+                  </span>
+                  {' '}— last updated {new Date(existingPayout.updatedAt).toLocaleDateString()}.
+                </p>
+              </div>
+            ) : (
+              <p className="text-[10px] text-amber-600 mb-4 font-semibold">
+                No payout destination configured yet — set one before you can withdraw escrow releases.
+              </p>
+            )}
 
             <button
               type="submit"
@@ -444,6 +505,47 @@ export const CommissionerSettings: React.FC = () => {
             </button>
           </div>
         </form>
+
+        {/* Confirmation required before a payout destination change takes effect */}
+        {showPayoutConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+            <div className="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg bg-amber-100 shrink-0">
+                  <ShieldAlert className="w-5 h-5 text-amber-700" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900">Confirm Payout Destination</h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Future escrow releases will be sent to:
+                  </p>
+                </div>
+              </div>
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800">
+                <div><strong>{payoutProvider === 'AIRTEL_MONEY' ? 'Airtel Money' : 'MTN MoMo'}</strong> — {payoutMsisdn}</div>
+                <div className="text-slate-500 mt-0.5">Account holder: {payoutAccountHolderName}</div>
+              </div>
+              <div className="flex items-center gap-2 justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowPayoutConfirm(false)}
+                  className="px-4 py-2 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                  id="btn-cancel-payout-confirm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmSavePayoutDestination}
+                  className="px-4 py-2 rounded-lg text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white cursor-pointer"
+                  id="btn-confirm-payout-destination"
+                >
+                  Confirm & Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* === SECTION 4: COMMISSIONING FEES === */}
         <form onSubmit={handleSaveFees}>

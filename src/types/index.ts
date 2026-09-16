@@ -165,15 +165,6 @@ export interface UserProfile {
   admissionDecisionAt?: string;
   admissionDecisionBy?: string;
   admissionDecisionReason?: string;
-  // Where this commissioner's escrow-release payouts are actually sent.
-  // Deliberately a distinct, explicitly-configured setting from `phone`
-  // (their contact number) — payouts must go to a destination the
-  // commissioner set up on purpose, not whatever number happens to be on
-  // their contact profile or was typed into a withdrawal form in the
-  // moment.
-  payoutProvider?: 'MTN_MOMO' | 'AIRTEL_MONEY';
-  payoutMsisdn?: string;
-  payoutDestinationUpdatedAt?: string;
   bio?: string;
   physicalChambersAddress?: string;
   signatureDataUrl?: string;
@@ -529,6 +520,21 @@ export interface ReviewItem {
  * The Commissioner sets their professional fee; WALAYI keeps a separate platform fee.
  */
 export type CommissionerFeeModel = 'flat_rate' | 'per_item';
+
+// A commissioner's payout destination — kept in its own collection (not on
+// UserProfile) so it is never readable by anyone other than its owner or an
+// admin, satisfying "never expose payment details publicly" at the rules
+// level rather than only by omitting it from the UI.
+export interface PayoutDestination {
+  commissionerId: string;
+  provider: 'MTN_MOMO' | 'AIRTEL_MONEY';
+  msisdn: string;
+  accountHolderName: string;
+  verificationStatus: 'UNVERIFIED' | 'VERIFIED';
+  updatedAt: string; // ISO timestamp
+  updatedBy: string; // Commissioner's UID
+  versionId: string; // Locked onto a transaction at initiation time
+}
 
 export interface CommissionerFeeSettings {
   commissionerId: string;

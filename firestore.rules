@@ -118,5 +118,21 @@ service cloud.firestore {
       allow read, update, delete: if isSignedIn() && (resource.data.uploaderId == request.auth.uid || isAdmin());
       allow create: if isSignedIn() && request.resource.data.uploaderId == request.auth.uid;
     }
+
+    // Commissioner Payout Destinations — deliberately kept out of the users
+    // collection (which any signed-in user may read) so mobile-money payout
+    // details are never exposed to anyone but their owner or an admin. The
+    // document id is the commissioner's own uid.
+    match /payoutDestinations/{commissionerId} {
+      allow read, write: if isOwner(commissionerId) || isAdmin();
+    }
+
+    // Commissioner Fee Settings — same posture as payout destinations:
+    // owner (or admin) only. Not currently marked private in these rules,
+    // closing that gap alongside the payout destination migration.
+    match /commissionerFeeSettings/{commissionerId} {
+      allow read: if true;
+      allow write: if isOwner(commissionerId) || isAdmin();
+    }
   }
 }

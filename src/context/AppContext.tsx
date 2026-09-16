@@ -478,8 +478,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             allowsRemote: data.allowsRemote !== undefined ? !!data.allowsRemote : true,
             lastActiveAt: data.lastActiveAt || undefined,
             sealDesign: data.sealDesign || undefined,
-            payoutProvider: data.payoutProvider || undefined,
-            payoutMsisdn: data.payoutMsisdn || undefined,
           });
         });
 
