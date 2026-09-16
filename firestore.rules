@@ -108,5 +108,15 @@ service cloud.firestore {
       );
       allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
+
+    // Document Drafts — a user's own in-progress upload, saved so they can
+    // leave WALAYI and resume later without losing the document or their
+    // place in the wizard. Strictly private to the uploader (or an admin
+    // for support purposes); never readable by any other party, unlike a
+    // commissioningRequest which is public once it exists.
+    match /documentDrafts/{draftId} {
+      allow read, update, delete: if isSignedIn() && (resource.data.uploaderId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.uploaderId == request.auth.uid;
+    }
   }
 }

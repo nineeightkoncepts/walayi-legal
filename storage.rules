@@ -30,5 +30,16 @@ service firebase.storage {
       allow write: if request.auth != null
                     && request.resource.size < 25 * 1024 * 1024;
     }
+
+    // Draft documents: a user's own in-progress upload, not yet submitted to
+    // a Commissioner. Unlike a commissioning document, a draft is private —
+    // only its owner (encoded in the path itself) may read or write it.
+    // Path written by src/services/documentStorageService.ts
+    match /draftDocuments/{uploaderId}/{draftId}/{fileName} {
+      allow read: if request.auth != null && request.auth.uid == uploaderId;
+      allow write: if request.auth != null
+                    && request.auth.uid == uploaderId
+                    && request.resource.size < 25 * 1024 * 1024;
+    }
   }
 }

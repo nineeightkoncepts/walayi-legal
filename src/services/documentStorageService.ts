@@ -24,3 +24,21 @@ export async function uploadCommissioningDocument(requestId: string, file: File)
 
   return { url, mimeType };
 }
+
+/**
+ * Uploads a document a user has started but not yet submitted to a
+ * Commissioner, keyed by a draft id rather than a commissioning request id
+ * (a draft has no request yet). This is what lets "save as draft and
+ * return later" actually preserve the original file, not just its name.
+ */
+export async function uploadDraftDocument(uploaderId: string, draftId: string, file: File): Promise<UploadedDocument> {
+  const safeName = file.name.replace(/[^a-zA-Z0-9_.\-]/g, '_');
+  const storagePath = `draftDocuments/${uploaderId}/${draftId}/original-${safeName}`;
+  const storageRef = ref(storage, storagePath);
+  const mimeType = file.type || 'application/octet-stream';
+
+  await uploadBytes(storageRef, file, { contentType: mimeType });
+  const url = await getDownloadURL(storageRef);
+
+  return { url, mimeType };
+}

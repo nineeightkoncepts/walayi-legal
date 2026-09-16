@@ -41,7 +41,7 @@ import {
 } from 'lucide-react';
 import { getStatutoryOathText } from '../../services/juratService';
 import { computeSha256 } from '../../services/hashService';
-import { uploadCommissioningDocument } from '../../services/documentStorageService';
+import { uploadCommissioningDocument, uploadDraftDocument } from '../../services/documentStorageService';
 import { checkCommissionerConflict, ConflictCheckResult } from '../../utils/conflictValidation';
 import { UserAvatar } from '../common/UserAvatar';
 import { PlatformFeeSheet } from '../payment/PlatformFeeSheet';
@@ -56,6 +56,7 @@ export const NewCommissioningModal: React.FC = () => {
   const {
     currentUser,
     users,
+    requests,
     preselectedCommissionerId,
     createCommissioningRequest,
     updateCommissioningRequest,
@@ -63,7 +64,12 @@ export const NewCommissioningModal: React.FC = () => {
     setActiveCommissioningId,
     setCurrentView,
     platformFeePercentage,
-    addNotification
+    addNotification,
+    drafts,
+    activeDraftId,
+    setActiveDraftId,
+    saveDraftDocument,
+    deleteDraftDocument
   } = useApp();
 
   // Holds the actual selected File so the real bytes can be uploaded once the
@@ -71,6 +77,20 @@ export const NewCommissioningModal: React.FC = () => {
   // not a hash of the filename/size). Kept in a ref, not state — the File
   // object itself never needs to trigger a re-render.
   const documentFileRef = useRef<File | null>(null);
+
+  // The draft this session is saving into, once one exists (created on first
+  // file upload, or restored from activeDraftId on resume). Kept in a ref so
+  // auto-save calls always target the right doc without waiting on a
+  // re-render, and so it survives being set from inside an async callback.
+  const myDraftIdRef = useRef<string | null>(null);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
+  // When resuming a draft, the browser's original File object no longer
+  // exists (it can't survive a reload) — this is the uploaded copy's own
+  // URL, used to reconstruct a File at final submission time so the real
+  // document still ends up attached to the finished request.
+  const [restoredOriginalFileUrl, setRestoredOriginalFileUrl] = useState<string | null>(null);
+  const [restoredOriginalFileMimeType, setRestoredOriginalFileMimeType] = useState<string | null>(null);
 
   // Wizard Step: 1 = Document & Deponent, 2 = Commissioner Selection, 3 = Escrow & Payment, 4 = Ready
   const [step, setStep] = useState<number>(1);
@@ -142,6 +162,104 @@ export const NewCommissioningModal: React.FC = () => {
   const [isHashingAnnexure, setIsHashingAnnexure] = useState(false);
   const [annexureError, setAnnexureError] = useState<string | null>(null);
 
+  // Resume a saved draft (opened via "Resume" in My Documents, or a prior
+  // session's activeDraftId surviving a refresh) by restoring every field
+  // the wizard had captured, and jumping straight back to the saved step —
+  // rather than making the user start over from a blank Step 1.
+  useEffect(() => {
+    if (hasRestoredDraft) return;
+    if (!activeDraftId) {
+      setHasRestoredDraft(true);
+      return;
+    }
+    const draft = drafts.find(d => d.id === activeDraftId);
+    if (!draft) return; // Drafts arrive async from Firestore — wait for it.
+
+    myDraftIdRef.current = draft.id;
+    setDocumentTitle(draft.documentTitle || '');
+    setDocumentType(draft.documentType || 'affidavit_general');
+    setFileName(draft.fileName || '');
+    setFileSizeKb(draft.fileSizeKb || 0);
+    setSha256Hash(draft.documentSha256 || '');
+    setRestoredOriginalFileUrl(draft.originalFileUrl || null);
+    setRestoredOriginalFileMimeType(draft.originalFileMimeType || null);
+
+    const ws = draft.wizardState || {};
+    if (typeof ws.deponentSelectionType === 'string') setDeponentSelectionType(ws.deponentSelectionType as 'self' | 'on_behalf');
+    if (typeof ws.deponentFullName === 'string') setDeponentFullName(ws.deponentFullName);
+    if (typeof ws.deponentNin === 'string') setDeponentNin(ws.deponentNin);
+    if (typeof ws.uploaderFirm === 'string') setUploaderFirm(ws.uploaderFirm);
+    if (typeof ws.isJudicialMatterHandling === 'boolean') setIsJudicialMatterHandling(ws.isJudicialMatterHandling);
+    if (typeof ws.selectedProId === 'string') setSelectedProId(ws.selectedProId);
+    if (typeof ws.solemnisationType === 'string') setSolemnisationType(ws.solemnisationType as SolemnisationType);
+    if (typeof ws.language === 'string') setLanguage(ws.language as 'English' | 'Luganda');
+    if (typeof ws.hasAnnexures === 'boolean') setHasAnnexures(ws.hasAnnexures);
+    if (Array.isArray(ws.annexuresList)) setAnnexuresList(ws.annexuresList as AnnexureItem[]);
+
+    setStep(draft.wizardStep && draft.wizardStep >= 1 ? draft.wizardStep : 1);
+    setHasRestoredDraft(true);
+
+    addNotification(
+      'Draft Restored',
+      `Continuing "${draft.documentTitle || draft.fileName}" from where you left off.`,
+      'INFO'
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDraftId, drafts, hasRestoredDraft]);
+
+  // Persists the wizard's current state to this session's draft (creating
+  // one on first call). Safe to call often — it's how "leave WALAYI and
+  // return later without losing progress" actually holds true even if the
+  // user never clicks an explicit save button.
+  const persistDraft = async (overrides?: Partial<{ status: 'DRAFT' | 'READY_TO_COMMISSION'; step: number }>) => {
+    if (!documentTitle && !fileName) return; // Nothing worth saving yet.
+    if (currentUser.id === 'guest-deponent') return;
+    try {
+      const newId = await saveDraftDocument(myDraftIdRef.current, {
+        status: overrides?.status || 'DRAFT',
+        documentTitle: documentTitle || fileName || 'Untitled Draft',
+        documentType,
+        fileName,
+        fileSizeKb,
+        documentSha256: sha256Hash,
+        wizardStep: overrides?.step ?? step,
+        wizardState: {
+          deponentSelectionType,
+          deponentFullName,
+          deponentNin,
+          uploaderFirm,
+          isJudicialMatterHandling,
+          selectedProId,
+          solemnisationType,
+          language,
+          hasAnnexures,
+          annexuresList,
+        },
+      });
+      if (!myDraftIdRef.current) {
+        myDraftIdRef.current = newId;
+        setActiveDraftId(newId);
+      }
+    } catch (err) {
+      console.warn('Failed to save draft:', err);
+    }
+  };
+
+  const handleSaveDraftAndExit = async () => {
+    setIsSavingDraft(true);
+    try {
+      await persistDraft({ status: 'DRAFT' });
+      addNotification(
+        'Draft Saved',
+        'Your document and progress are saved. Resume anytime from My Documents.',
+        'SUCCESS'
+      );
+      setCurrentView('documents');
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
   // Resolve active commissioner
   const activePro = verifiedPros.find(p => p.id === selectedProId) || verifiedPros[0];
 
@@ -182,6 +300,45 @@ export const NewCommissioningModal: React.FC = () => {
     const hash = await computeSha256(buffer);
     setSha256Hash(hash);
     setIsHashing(false);
+
+    // Persist the draft the moment a file is selected — this is what makes
+    // "upload a document ... and return later without losing the document"
+    // actually true even if the user never clicks an explicit save button.
+    // Drafts are stored against the authenticated uploader, so there's
+    // nothing to save for an unauthenticated guest session.
+    if (currentUser.id === 'guest-deponent') return;
+    try {
+      const draftId = myDraftIdRef.current || await saveDraftDocument(null, {
+        status: 'DRAFT',
+        documentTitle: documentTitle || file.name,
+        documentType,
+        fileName: file.name,
+        fileSizeKb: Math.round(file.size / 1024),
+        documentSha256: hash,
+        wizardStep: step,
+        wizardState: {},
+      });
+      if (!myDraftIdRef.current) {
+        myDraftIdRef.current = draftId;
+        setActiveDraftId(draftId);
+      }
+
+      const uploaded = await uploadDraftDocument(currentUser.id, draftId, file);
+      await saveDraftDocument(draftId, {
+        status: 'DRAFT',
+        documentTitle: documentTitle || file.name,
+        documentType,
+        fileName: file.name,
+        fileSizeKb: Math.round(file.size / 1024),
+        documentSha256: hash,
+        originalFileUrl: uploaded.url,
+        originalFileMimeType: uploaded.mimeType,
+        wizardStep: step,
+        wizardState: {},
+      });
+    } catch (err) {
+      console.warn('Failed to auto-save draft on upload:', err);
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -319,6 +476,24 @@ export const NewCommissioningModal: React.FC = () => {
       return;
     }
 
+    // Prevent an accidental duplicate workflow for a document already
+    // submitted to a Commissioner — matched by content hash, not just
+    // filename, so re-uploading the exact same file is caught.
+    const terminalStatuses = ['REJECTED', 'CANCELLED', 'DISPUTED'];
+    const existingSubmission = requests.find(r =>
+      r.uploaderId === currentUser.id &&
+      r.documentSha256 === sha256Hash &&
+      !terminalStatuses.includes(r.status)
+    );
+    if (existingSubmission) {
+      addNotification(
+        'Already Submitted',
+        `This document was already submitted as ${existingSubmission.certificateNumber}. Check My Documents instead of creating a duplicate request.`,
+        'ALERT'
+      );
+      return;
+    }
+
     setIsProcessingPayment(true);
 
     try {
@@ -386,6 +561,28 @@ export const NewCommissioningModal: React.FC = () => {
           .catch(err => {
             console.warn('Original document upload notice:', err?.message);
           });
+      } else if (restoredOriginalFileUrl) {
+        // Resumed from a saved draft — the browser File object no longer
+        // exists, but the draft's own uploaded copy does. Fetch it back and
+        // re-upload it under the request's own (publicly readable) storage
+        // path, so the finished request still carries the real document.
+        fetch(restoredOriginalFileUrl)
+          .then(res => res.blob())
+          .then(blob => {
+            const reconstructed = new File([blob], fileName || 'document', {
+              type: restoredOriginalFileMimeType || blob.type || 'application/octet-stream'
+            });
+            return uploadCommissioningDocument(createdReq.id, reconstructed);
+          })
+          .then(({ url, mimeType }) => {
+            updateCommissioningRequest(createdReq.id, {
+              rawFileUrl: url,
+              originalMimeType: mimeType
+            });
+          })
+          .catch(err => {
+            console.warn('Restored document re-upload notice:', err?.message);
+          });
       }
     } catch (err) {
       console.error(err);
@@ -397,7 +594,19 @@ export const NewCommissioningModal: React.FC = () => {
     <div className="max-w-3xl mx-auto pb-16" id="commissioning-flow-container">
       
       {/* Flow Header */}
-      <div className="mb-6 space-y-2 text-center">
+      <div className="mb-6 space-y-2 text-center relative">
+        {step < 3 && (fileName || documentTitle) && currentUser.id !== 'guest-deponent' && (
+          <button
+            type="button"
+            onClick={handleSaveDraftAndExit}
+            disabled={isSavingDraft}
+            className="absolute right-0 top-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 text-[11px] font-bold cursor-pointer transition-colors disabled:opacity-50"
+            id="btn-save-draft-exit"
+          >
+            {isSavingDraft ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />}
+            Save Draft &amp; Exit
+          </button>
+        )}
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-50 text-[#0097A7] text-xs font-bold font-mono-code border border-teal-100">
           <ShieldCheck className="w-3.5 h-3.5" />
           STATUTORY COMMISSIONING • STEP {step} OF 3
@@ -406,7 +615,7 @@ export const NewCommissioningModal: React.FC = () => {
           Digital Affidavit & Oath Commissioning
         </h1>
         <p className="text-xs text-slate-500 max-w-lg mx-auto leading-relaxed">
-          Statutory verification with automatic ethical safeguards under Uganda Cap. 5 & the Advocates Act.
+          Includes an automatic conflict-of-interest check against the Advocates Act and Commissioners for Oaths Act before a commissioner is confirmed.
         </p>
       </div>
 
@@ -967,7 +1176,7 @@ export const NewCommissioningModal: React.FC = () => {
           </div>
 
           <button
-            onClick={() => setStep(2)}
+            onClick={() => { persistDraft({ status: 'DRAFT', step: 2 }); setStep(2); }}
             disabled={!fileName}
             className="w-full py-5 rounded-2xl bg-[#0097A7] hover:bg-[#00838F] disabled:bg-slate-200 disabled:cursor-not-allowed text-white font-black text-sm uppercase tracking-[0.2em] shadow-xl hover:shadow-2xl transition-all cursor-pointer flex items-center justify-center gap-3 active:scale-95"
             id="btn-step1-next"
@@ -1186,6 +1395,7 @@ export const NewCommissioningModal: React.FC = () => {
                   });
                   return;
                 }
+                persistDraft({ status: 'READY_TO_COMMISSION', step: 3 });
                 setStep(3);
               }}
               className="flex-1 py-4 rounded-2xl bg-[#0097A7] hover:bg-[#00838F] disabled:bg-slate-200 disabled:cursor-not-allowed text-white font-black text-xs sm:text-sm uppercase tracking-[0.2em] shadow-xl hover:shadow-2xl transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95"

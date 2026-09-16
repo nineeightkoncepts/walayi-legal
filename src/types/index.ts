@@ -313,6 +313,31 @@ export interface AuditEvent {
   prevEventHash?: string;
 }
 
+// A document a user has started uploading/configuring but not yet submitted
+// to a Commissioner — the "save and return later" stage described in the
+// brief. Deliberately separate from CommissioningRequest: a draft carries no
+// certificate number, security number or payment reference, since none of
+// those exist yet and generating them early would misrepresent an
+// in-progress upload as an actual commissioning transaction.
+export interface DocumentDraft {
+  id: string;
+  uploaderId: string;
+  status: 'DRAFT' | 'READY_TO_COMMISSION';
+  documentTitle: string;
+  documentType: DocumentType;
+  fileName: string;
+  fileSizeKb: number;
+  documentSha256: string;
+  originalFileUrl?: string;
+  originalFileMimeType?: string;
+  // Everything else the wizard had captured, so resuming restores the user
+  // to exactly where they left off rather than a blank Step 1.
+  wizardStep: number;
+  wizardState: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CommissioningRequest {
   id: string;
   certificateNumber: string; // e.g. "WAL-UG-2026-8849"

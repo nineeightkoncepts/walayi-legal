@@ -9,10 +9,11 @@ import {
   CommissioningRequest, 
   PaymentTransaction, 
   LegalPolicyRule, 
-  NotificationItem, 
+  NotificationItem,
   CredentialDocument,
   CommissioningStatus,
-  AuditEvent
+  AuditEvent,
+  DocumentDraft
 } from '../types';
 import { 
   INITIAL_USERS, 
@@ -65,6 +66,14 @@ interface AppContextType {
   users: UserProfile[];
   commissionerAdmissions: UserProfile[];
   requests: CommissioningRequest[];
+  drafts: DocumentDraft[];
+  activeDraftId: string | null;
+  setActiveDraftId: (id: string | null) => void;
+  saveDraftDocument: (
+    draftId: string | null,
+    fields: Partial<Omit<DocumentDraft, 'id' | 'uploaderId' | 'createdAt' | 'updatedAt'>>
+  ) => Promise<string>;
+  deleteDraftDocument: (draftId: string) => Promise<void>;
   credentialDocs: Record<string, CredentialDocument[]>;
   policyRules: LegalPolicyRule[];
   transactions: PaymentTransaction[];
@@ -199,6 +208,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeCommissioningId, setActiveCommissioningId] = useState<string | null>(() => {
     return localStorage.getItem('walayi_active_commissioning_id') || 'req-002';
   });
+  // Documents a user has started uploading/configuring but not yet
+  // submitted to a Commissioner — see the live drafts listener below.
+  const [drafts, setDrafts] = useState<DocumentDraft[]>([]);
+  // Which draft (if any) the New Commissioning wizard should resume into on
+  // open — persisted so a "Resume" click survives a page reload too.
+  const [activeDraftId, setActiveDraftIdState] = useState<string | null>(() => {
+    return localStorage.getItem('walayi_active_draft_id') || null;
+  });
+  const setActiveDraftId = (id: string | null) => {
+    setActiveDraftIdState(id);
+    try {
+      if (id) localStorage.setItem('walayi_active_draft_id', id);
+      else localStorage.removeItem('walayi_active_draft_id');
+    } catch (e) {
+      // Ignored — localStorage may be unavailable (private browsing, etc.)
+    }
+  };
   const [preselectedCommissionerId, setPreselectedCommissionerId] = useState<string | null>(null);
   const [platformFeePercentage, setPlatformFeePercentage] = useState<number>(5);
   const [deviceMode, setDeviceMode] = useState<'desktop' | 'mobile' | 'tablet'>('desktop');
@@ -628,6 +654,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }, (err) => console.warn('Notifications listener notice:', err?.message));
     } catch (e) {
       console.warn('Could not attach notifications listener', e);
+    }
+
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [isSignedIn, currentUser.id]);
+
+  // ---------------------------------------------------------------------------
+  // Live document drafts.
+  // A document a user has uploaded/started but not yet submitted to a
+  // Commissioner, scoped to the signed-in uploader and synced from Firestore
+  // so it survives a refresh, logout/login, or reopening the app on another
+  // device — not just a local-session convenience.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!isSignedIn || !currentUser.id || currentUser.id === 'guest-deponent') {
+      setDrafts([]);
+      return;
+    }
+
+    let unsub: (() => void) | undefined;
+    try {
+      const myDraftsQuery = fsQuery(collection(db, 'documentDrafts'), where('uploaderId', '==', currentUser.id));
+      unsub = onSnapshot(myDraftsQuery, (snap) => {
+        const items: DocumentDraft[] = [];
+        snap.forEach((d) => {
+          const data: any = d.data() || {};
+          items.push({
+            id: d.id,
+            uploaderId: data.uploaderId,
+            status: data.status || 'DRAFT',
+            documentTitle: data.documentTitle || 'Untitled Draft',
+            documentType: data.documentType || 'affidavit_general',
+            fileName: data.fileName || '',
+            fileSizeKb: data.fileSizeKb || 0,
+            documentSha256: data.documentSha256 || '',
+            originalFileUrl: data.originalFileUrl || undefined,
+            originalFileMimeType: data.originalFileMimeType || undefined,
+            wizardStep: data.wizardStep || 1,
+            wizardState: data.wizardState || {},
+            createdAt: data.createdAt || new Date().toISOString(),
+            updatedAt: data.updatedAt || new Date().toISOString(),
+          });
+        });
+        items.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+        setDrafts(items);
+      }, (err) => console.warn('Drafts listener notice:', err?.message));
+    } catch (e) {
+      console.warn('Could not attach drafts listener', e);
     }
 
     return () => {
@@ -1174,6 +1249,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  // Creates or updates a document draft — the "upload, save, leave and
+  // return later" stage that exists before any CommissioningRequest is
+  // created. Passing an existing draftId updates that draft in place;
+  // omitting it creates a new one and returns its id.
+  const saveDraftDocument = async (
+    draftId: string | null,
+    fields: Partial<Omit<DocumentDraft, 'id' | 'uploaderId' | 'createdAt' | 'updatedAt'>>
+  ): Promise<string> => {
+    const id = draftId || `draft-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const now = new Date().toISOString();
+    const existing = drafts.find(d => d.id === id);
+
+    const draftDoc: Record<string, unknown> = {
+      ...fields,
+      uploaderId: currentUser.id,
+      updatedAt: now,
+      createdAt: existing?.createdAt || now,
+    };
+
+    await setDoc(doc(db, 'documentDrafts', id), draftDoc, { merge: true });
+    return id;
+  };
+
+  // Intentional draft deletion (e.g. the user discards an upload they no
+  // longer want) — irreversible, so the UI confirms before calling this.
+  const deleteDraftDocument = async (draftId: string): Promise<void> => {
+    await deleteDoc(doc(db, 'documentDrafts', draftId));
+    if (activeDraftId === draftId) {
+      setActiveDraftId(null);
+    }
+  };
+
   const createCommissioningRequest = async (data: Partial<CommissioningRequest>): Promise<CommissioningRequest> => {
     // 1. Role-Based Conflict Check Enforcement (Immutable Critical Path Step 4)
     if (data.assignedProfessionalId) {
@@ -1295,6 +1402,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       `Affidavit ${certNumber} created and escrow payment ${effectivePaymentStatus === 'ESCROWED' ? 'completed' : 'pending'}.`,
       'CEREMONY'
     );
+
+    // The draft (if this request was created by resuming/finishing one) has
+    // now become a real commissioning request — remove it so it can't be
+    // resumed and accidentally resubmitted as a second, duplicate workflow.
+    if (activeDraftId) {
+      deleteDoc(doc(db, 'documentDrafts', activeDraftId)).catch((err) =>
+        console.warn('Draft cleanup notice:', err?.message)
+      );
+      setActiveDraftId(null);
+    }
 
     return newReq;
   };
@@ -1684,6 +1801,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       users,
       commissionerAdmissions,
       requests,
+      drafts,
+      activeDraftId,
+      setActiveDraftId,
+      saveDraftDocument,
+      deleteDraftDocument,
       credentialDocs,
       policyRules,
       transactions,
