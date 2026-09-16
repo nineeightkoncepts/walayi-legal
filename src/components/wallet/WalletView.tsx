@@ -94,6 +94,24 @@ export const WalletView: React.FC = () => {
   const isPlatformAdmin = currentUser.role === 'admin' || currentUser.role === 'master_admin' || currentUser.role === 'super_admin';
   const myTransactions = isPlatformAdmin ? transactions : transactions.filter(t => t.userId === currentUser.id);
 
+  // The brief's required ledger vocabulary: PENDING, CONFIRMED, RELEASED and
+  // PAID, with FAILED, REFUNDED, REVERSED and DISPUTED as exception states.
+  // Derived from real data — the linked request's own paymentStatus/status
+  // where one exists — never invented.
+  const ledgerStatusFor = (txn: typeof transactions[number]): string => {
+    const linkedRequest = txn.commissioningId ? requests.find(r => r.id === txn.commissioningId) : undefined;
+    if (txn.status === 'FAILED') return 'FAILED';
+    if (txn.status === 'REFUNDED' || linkedRequest?.paymentStatus === 'REFUNDED') return 'REFUNDED';
+    if (linkedRequest?.status === 'DISPUTED') return 'DISPUTED';
+    if (linkedRequest?.status === 'CANCELLED' || linkedRequest?.status === 'REJECTED') return 'REVERSED';
+    if (txn.type === 'PAYOUT_WITHDRAWAL' || txn.type === 'COMMISSIONER_PAYOUT') {
+      return (txn.status === 'CONFIRMED' || txn.status === 'SETTLED') ? 'PAID' : 'PENDING';
+    }
+    if (linkedRequest?.paymentStatus === 'RELEASED') return 'RELEASED';
+    if (linkedRequest?.paymentStatus === 'ESCROWED' || txn.status === 'CONFIRMED' || txn.status === 'SETTLED') return 'CONFIRMED';
+    return 'PENDING';
+  };
+
   const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hasPayoutDestination) {
@@ -246,17 +264,22 @@ export const WalletView: React.FC = () => {
             <Clock className="w-4 h-4 text-blue-600" />
             Mobile Money Ledger & Settlement Records ({myTransactions.length})
           </h2>
-          <span className="text-[10px] text-slate-500 font-mono-code">Live Ugandan Shilling Ledger</span>
+          <span className="text-[10px] text-slate-500 font-mono-code">Ugandan Shilling Ledger</span>
         </div>
+        <p className="text-[10px] text-slate-400 -mt-2">
+          A payout only reads PAID once the mobile money provider itself confirms the disbursement — sandbox payouts in this environment are simulated pending production provider credentials.
+        </p>
 
         <div className="overflow-x-auto rounded-2xl border border-slate-200">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-slate-600 font-mono-code border-b border-slate-200 text-[11px]">
               <tr>
                 <th className="px-4 py-3 font-semibold">Transaction ID</th>
+                <th className="px-4 py-3 font-semibold">Document Ref</th>
                 <th className="px-4 py-3 font-semibold">Provider</th>
                 <th className="px-4 py-3 font-semibold">Type</th>
                 <th className="px-4 py-3 font-semibold">Gross Amount</th>
+                <th className="px-4 py-3 font-semibold">Annexure Charges</th>
                 <th className="px-4 py-3 font-semibold">Platform Fee</th>
                 <th className="px-4 py-3 font-semibold">Net Payout</th>
                 <th className="px-4 py-3 font-semibold">Status</th>
@@ -266,15 +289,20 @@ export const WalletView: React.FC = () => {
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {myTransactions.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
                     No transactions on record yet.
                   </td>
                 </tr>
               )}
-              {myTransactions.map((txn) => (
+              {myTransactions.map((txn) => {
+                const linkedRequest = txn.commissioningId ? requests.find(r => r.id === txn.commissioningId) : undefined;
+                return (
                 <tr key={txn.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-4 py-3 font-mono-code text-blue-700 font-semibold">
                     <div>{txn.transactionRef}</div>
+                  </td>
+                  <td className="px-4 py-3 font-mono-code text-slate-600 text-[11px]">
+                    {linkedRequest?.certificateNumber || '—'}
                   </td>
                   <td className="px-4 py-3">
                     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 border border-slate-200 text-slate-800">
@@ -298,26 +326,35 @@ export const WalletView: React.FC = () => {
                     UGX {txn.amountUGX.toLocaleString()}
                   </td>
                   <td className="px-4 py-3 font-mono-code text-slate-500">
+                    UGX {(linkedRequest?.exhibitFeeUGX || 0).toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3 font-mono-code text-slate-500">
                     UGX {txn.platformFeeUGX.toLocaleString()}
                   </td>
                   <td className="px-4 py-3 font-mono-code text-emerald-700 font-bold">
                     UGX {txn.netPayoutUGX.toLocaleString()}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      txn.status === 'SETTLED' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                      txn.status === 'CONFIRMED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                      txn.status === 'FAILED' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
-                      'bg-amber-50 text-amber-700 border border-amber-200'
-                    }`}>
-                      {txn.status}
-                    </span>
+                    {(() => {
+                      const ledgerStatus = ledgerStatusFor(txn);
+                      return (
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          ledgerStatus === 'PAID' || ledgerStatus === 'RELEASED' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                          ledgerStatus === 'CONFIRMED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                          ledgerStatus === 'FAILED' || ledgerStatus === 'REVERSED' || ledgerStatus === 'DISPUTED' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                          ledgerStatus === 'REFUNDED' ? 'bg-slate-100 text-slate-600 border border-slate-200' :
+                          'bg-amber-50 text-amber-700 border border-amber-200'
+                        }`}>
+                          {ledgerStatus}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-slate-500 font-mono-code text-[11px]">
                     {new Date(txn.timestamp).toLocaleDateString()}
                   </td>
                 </tr>
-              ))}
+              );})}
             </tbody>
           </table>
         </div>

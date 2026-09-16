@@ -143,11 +143,15 @@ export const CommissionerDashboard: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono-code font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
-              COMMISSIONER FOR OATHS • HIGH COURT OF UGANDA
+              {(currentUser.role || 'COMMISSIONER').replace(/_/g, ' ').toUpperCase()} • {currentUser.stationCity || 'UGANDA'}
             </span>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono-code font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
-              <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-              LICENCE: CFO/2024/0119 (ACTIVE)
+            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono-code font-bold border flex items-center gap-1.5 ${
+              currentUser.admissionStatus === 'ADMITTED'
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+            }`}>
+              <UserCheck className="w-3.5 h-3.5" />
+              {currentUser.admissionStatus === 'ADMITTED' ? 'ADMITTED' : 'ADMISSION PENDING'}
             </span>
           </div>
 
@@ -198,10 +202,19 @@ export const CommissionerDashboard: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setCurrentView('wallet')}
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+            id="btn-cfo-my-ledger"
+          >
+            <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+            <span>My Ledger</span>
+          </button>
+
+          <button
             onClick={() => setShowApiConfigModal(true)}
             className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
             id="btn-configure-api-keys"
-            title="Configure MTN MoMo, Airtel Money, and Daily.Co API Keys"
+            title="Configure video and mobile money gateway credentials"
           >
             <Key className="w-4 h-4 text-amber-400" />
             <span>API & Gateway Secrets</span>
