@@ -16,21 +16,34 @@ import {
   ExternalLink,
   RefreshCw
 } from 'lucide-react';
+import { isCommissionerLike } from '../../services/roleService';
 
 export const WalletView: React.FC = () => {
-  const { 
-    currentUser, 
+  const {
+    currentUser,
     requests,
-    transactions, 
-    platformFeePercentage, 
+    transactions,
+    platformFeePercentage,
     executePayment,
-    addNotification 
+    addNotification,
+    setCurrentView
   } = useApp();
+
+  const isCommissioner = isCommissionerLike(currentUser.role);
+  // Commissioners must configure a deliberate Payout Destination (in
+  // Commissioning Settings) before withdrawing — payouts must go to a
+  // destination set up on purpose, not whatever was typed into this modal.
+  // Non-commissioner roles (e.g. a deponent topping up) aren't gated by it.
+  const hasPayoutDestination = !isCommissioner || !!currentUser.payoutMsisdn;
 
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('200000');
-  const [withdrawProvider, setWithdrawProvider] = useState<'MTN_MOMO' | 'AIRTEL_MONEY'>('MTN_MOMO');
-  const [withdrawPhone, setWithdrawPhone] = useState(currentUser.phone || '0111777771');
+  const withdrawProvider = isCommissioner
+    ? (currentUser.payoutProvider || 'MTN_MOMO')
+    : 'MTN_MOMO' as 'MTN_MOMO' | 'AIRTEL_MONEY';
+  const withdrawPhone = isCommissioner
+    ? (currentUser.payoutMsisdn || '')
+    : (currentUser.phone || '');
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   // Dynamic escrow calculation from actual requests in statutory custody
@@ -48,6 +61,14 @@ export const WalletView: React.FC = () => {
 
   const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!hasPayoutDestination) {
+      addNotification(
+        'Payout Destination Required',
+        'Set up your payout destination in Commissioning Settings before withdrawing.',
+        'ALERT'
+      );
+      return;
+    }
     setIsWithdrawing(true);
 
     try {
@@ -103,12 +124,23 @@ export const WalletView: React.FC = () => {
         </div>
 
         <button
-          onClick={() => setIsWithdrawModalOpen(true)}
+          onClick={() => {
+            if (!hasPayoutDestination) {
+              addNotification(
+                'Payout Destination Required',
+                'Set up your payout destination in Commissioning Settings before withdrawing.',
+                'ALERT'
+              );
+              setCurrentView('commissioner-settings');
+              return;
+            }
+            setIsWithdrawModalOpen(true);
+          }}
           className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer whitespace-nowrap transition-colors"
           id="btn-open-withdraw-modal"
         >
           <ArrowUpRight className="w-4 h-4" />
-          Withdraw Payout to MoMo
+          {hasPayoutDestination ? 'Withdraw Payout to MoMo' : 'Set Up Payout Destination'}
         </button>
       </div>
 
@@ -259,32 +291,26 @@ export const WalletView: React.FC = () => {
                 </span>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Payout Mobile Network
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setWithdrawProvider('MTN_MOMO')}
-                    className={`p-3 rounded-xl border text-xs font-bold cursor-pointer transition-colors ${
-                      withdrawProvider === 'MTN_MOMO' ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    MTN Mobile Money
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setWithdrawProvider('AIRTEL_MONEY')}
-                    className={`p-3 rounded-xl border text-xs font-bold cursor-pointer transition-colors ${
-                      withdrawProvider === 'AIRTEL_MONEY' ? 'bg-red-50 border-red-300 text-red-900' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    Airtel Money
-                  </button>
+              {isCommissioner ? (
+                <div className="p-3.5 rounded-xl bg-teal-50 border border-teal-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-teal-900">Payout Destination</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsWithdrawModalOpen(false);
+                        setCurrentView('commissioner-settings');
+                      }}
+                      className="text-[10px] font-bold text-teal-700 hover:underline cursor-pointer"
+                    >
+                      Change in Settings
+                    </button>
+                  </div>
+                  <p className="text-xs font-mono-code font-bold text-teal-900 mt-1">
+                    {withdrawProvider === 'MTN_MOMO' ? 'MTN Mobile Money' : 'Airtel Money'} — {withdrawPhone}
+                  </p>
                 </div>
-              </div>
-
+              ) : (
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Registered Mobile Number
@@ -293,10 +319,11 @@ export const WalletView: React.FC = () => {
                   type="tel"
                   required
                   value={withdrawPhone}
-                  onChange={(e) => setWithdrawPhone(e.target.value)}
+                  readOnly
                   className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-mono-code text-xs focus:bg-white focus:border-blue-500 focus:outline-none"
                 />
               </div>
+              )}
 
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-[10px] text-slate-600 leading-relaxed">
                 Payouts are disbursed via automated bank/MNO settlement rail within 60 seconds.

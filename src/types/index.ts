@@ -165,6 +165,15 @@ export interface UserProfile {
   admissionDecisionAt?: string;
   admissionDecisionBy?: string;
   admissionDecisionReason?: string;
+  // Where this commissioner's escrow-release payouts are actually sent.
+  // Deliberately a distinct, explicitly-configured setting from `phone`
+  // (their contact number) — payouts must go to a destination the
+  // commissioner set up on purpose, not whatever number happens to be on
+  // their contact profile or was typed into a withdrawal form in the
+  // moment.
+  payoutProvider?: 'MTN_MOMO' | 'AIRTEL_MONEY';
+  payoutMsisdn?: string;
+  payoutDestinationUpdatedAt?: string;
   bio?: string;
   physicalChambersAddress?: string;
   signatureDataUrl?: string;

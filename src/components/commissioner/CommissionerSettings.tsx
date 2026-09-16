@@ -9,6 +9,7 @@ import {
   Loader2,
   FileSignature,
   User,
+  Smartphone,
 } from 'lucide-react';
 import {
   getCommissionerFeeSettings,
@@ -17,9 +18,15 @@ import {
   createFeeSnapshot,
 } from '../../services/commissionerFeeService';
 import { CommissionerFeeModel } from '../../types';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../../services/firebase';
+
+// Uganda mobile money numbers: 07XXXXXXXX (10 digits) or +2567XXXXXXXX.
+const isValidUgandaMsisdn = (value: string): boolean =>
+  /^(07\d{8}|\+2567\d{8})$/.test(value.trim());
 
 export const CommissionerSettings: React.FC = () => {
-  const { currentUser, addNotification } = useApp();
+  const { currentUser, addNotification, updateCurrentUser } = useApp();
 
   // Profile & Signature Upload
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
@@ -33,6 +40,13 @@ export const CommissionerSettings: React.FC = () => {
   const [affidavitFeeUGX, setAffidavitFeeUGX] = useState<number | ''>('');
   const [annexureFeesUGX, setAnnexureFeesUGX] = useState<number | ''>('');
   const [savingFees, setSavingFees] = useState(false);
+
+  // Payout Destination
+  const [payoutProvider, setPayoutProvider] = useState<'MTN_MOMO' | 'AIRTEL_MONEY'>(
+    currentUser.payoutProvider || 'MTN_MOMO'
+  );
+  const [payoutMsisdn, setPayoutMsisdn] = useState(currentUser.payoutMsisdn || '');
+  const [savingPayout, setSavingPayout] = useState(false);
 
   // UI
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -156,6 +170,38 @@ export const CommissionerSettings: React.FC = () => {
       setErrorMessage('Failed to save fees. Please try again.');
     } finally {
       setSavingFees(false);
+    }
+  };
+
+  const handleSavePayoutDestination = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    if (!isValidUgandaMsisdn(payoutMsisdn)) {
+      setErrorMessage('Enter a valid mobile money number, e.g. 0771234567 or +256771234567.');
+      return;
+    }
+
+    setSavingPayout(true);
+    try {
+      const updatedAt = new Date().toISOString();
+      await setDoc(
+        doc(db, 'users', currentUser.id),
+        { payoutProvider, payoutMsisdn: payoutMsisdn.trim(), payoutDestinationUpdatedAt: updatedAt },
+        { merge: true }
+      );
+      updateCurrentUser({ payoutProvider, payoutMsisdn: payoutMsisdn.trim(), payoutDestinationUpdatedAt: updatedAt });
+      setSuccessMessage('Payout destination saved. Future escrow releases will be sent here.');
+      addNotification(
+        'Payout Destination Saved',
+        `Your commissioning payouts will now be sent to ${payoutProvider === 'MTN_MOMO' ? 'MTN MoMo' : 'Airtel Money'} ${payoutMsisdn.trim()}.`,
+        'SUCCESS'
+      );
+    } catch (err) {
+      setErrorMessage('Failed to save payout destination. Please try again.');
+    } finally {
+      setSavingPayout(false);
     }
   };
 
@@ -310,7 +356,96 @@ export const CommissionerSettings: React.FC = () => {
           )}
         </div>
 
-        {/* === SECTION 3: COMMISSIONING FEES === */}
+        {/* === SECTION 3: PAYOUT DESTINATION === */}
+        <form onSubmit={handleSavePayoutDestination}>
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6 shadow-sm">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="p-2 rounded-lg bg-teal-100">
+                <Smartphone className="w-5 h-5 text-teal-700" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Payout Destination</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Where your commissioning escrow releases are sent — a deliberately configured setting, separate from your contact number.
+                </p>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="text-xs font-bold text-slate-700 block mb-2">Mobile Money Provider</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPayoutProvider('MTN_MOMO')}
+                  className={`p-3 rounded-lg border text-center transition-all cursor-pointer ${
+                    payoutProvider === 'MTN_MOMO'
+                      ? 'border-teal-600 bg-teal-50 text-teal-900 font-bold'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                  id="btn-payout-provider-mtn"
+                >
+                  <div className="text-[11px] font-bold">MTN Mobile Money</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPayoutProvider('AIRTEL_MONEY')}
+                  className={`p-3 rounded-lg border text-center transition-all cursor-pointer ${
+                    payoutProvider === 'AIRTEL_MONEY'
+                      ? 'border-teal-600 bg-teal-50 text-teal-900 font-bold'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                  id="btn-payout-provider-airtel"
+                >
+                  <div className="text-[11px] font-bold">Airtel Money</div>
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="text-xs font-bold text-slate-700 block mb-2">Payout Phone Number</label>
+              <input
+                type="tel"
+                value={payoutMsisdn}
+                onChange={(e) => setPayoutMsisdn(e.target.value)}
+                placeholder="e.g., 0771234567"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-teal-600 focus:outline-hidden"
+                id="input-payout-msisdn"
+              />
+              {currentUser.payoutMsisdn && currentUser.payoutDestinationUpdatedAt && (
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Currently on file: {currentUser.payoutProvider === 'AIRTEL_MONEY' ? 'Airtel Money' : 'MTN MoMo'} {currentUser.payoutMsisdn} — last updated{' '}
+                  {new Date(currentUser.payoutDestinationUpdatedAt).toLocaleDateString()}.
+                </p>
+              )}
+              {!currentUser.payoutMsisdn && (
+                <p className="text-[10px] text-amber-600 mt-1 font-semibold">
+                  No payout destination configured yet — set one before you can withdraw escrow releases.
+                </p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={savingPayout}
+              className="w-full py-3 px-4 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-md transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+              id="btn-save-payout-destination"
+            >
+              {savingPayout ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>SAVE PAYOUT DESTINATION</span>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+
+        {/* === SECTION 4: COMMISSIONING FEES === */}
         <form onSubmit={handleSaveFees}>
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
             <div className="flex items-start gap-3 mb-6">
