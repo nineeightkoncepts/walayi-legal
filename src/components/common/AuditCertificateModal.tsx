@@ -17,6 +17,7 @@ import {
 import { OfficialSeal } from './OfficialSeal';
 import QRCode from 'qrcode';
 import { downloadFinalInstrumentPdf } from '../../services/pdfOverlayService';
+import { useApp } from '../../context/AppContext';
 
 interface AuditCertificateModalProps {
   request: CommissioningRequest;
@@ -24,11 +25,19 @@ interface AuditCertificateModalProps {
   onClose: () => void;
 }
 
-export const AuditCertificateModal: React.FC<AuditCertificateModalProps> = ({ 
-  request, 
-  initialTab = 'instrument', 
-  onClose 
+export const AuditCertificateModal: React.FC<AuditCertificateModalProps> = ({
+  request,
+  initialTab = 'instrument',
+  onClose
 }) => {
+  const { users } = useApp();
+  // The certificate's applied seal must reflect what the commissioning
+  // professional actually configured in Seal Studio, not always the fixed
+  // default look — falls back to the standard design when unset (e.g. the
+  // professional hasn't customized one, or isn't in the local roster).
+  const sealOwner = users.find(u => u.id === request.assignedProfessionalId);
+  const sealDesign = sealOwner?.sealDesign;
+
   const [activeTab, setActiveTab] = useState<'instrument' | 'audit'>(initialTab);
   const [copied, setCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
@@ -304,6 +313,9 @@ export const AuditCertificateModal: React.FC<AuditCertificateModalProps> = ({
                       stationOrCourt={request.assignedProfessionalStation || 'HIGH COURT OF UGANDA'}
                       serialNumber={request.commissionerSealSerial || `UG-CFO-2026-${request.certificateNumber.slice(-4)}`}
                       size="md"
+                      borderStyle={sealDesign?.borderStyle}
+                      emblem={sealDesign?.emblem}
+                      inkColor={sealDesign?.inkColor}
                     />
                   </div>
                 </div>
@@ -569,6 +581,9 @@ export const AuditCertificateModal: React.FC<AuditCertificateModalProps> = ({
                   stationOrCourt={request.assignedProfessionalStation || 'HIGH COURT OF UGANDA'}
                   serialNumber={request.commissionerSealSerial || `UG-CFO-2026-${request.certificateNumber.slice(-4)}`}
                   size="md"
+                  borderStyle={sealDesign?.borderStyle}
+                  emblem={sealDesign?.emblem}
+                  inkColor={sealDesign?.inkColor}
                 />
               </div>
 

@@ -449,6 +449,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             availableNow: data.availableNow !== undefined ? !!data.availableNow : true,
             allowsRemote: data.allowsRemote !== undefined ? !!data.allowsRemote : true,
             lastActiveAt: data.lastActiveAt || undefined,
+            sealDesign: data.sealDesign || undefined,
+            payoutProvider: data.payoutProvider || undefined,
+            payoutMsisdn: data.payoutMsisdn || undefined,
           });
         });
 
@@ -1042,6 +1045,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         userId,
         'admission'
       );
+
+      // Every admitted commissioner needs a working digital stamp from the
+      // moment they can start taking commissions — provision the standard
+      // default here (unless they already designed one in Seal Studio ahead
+      // of admission, in which case leave it untouched).
+      const userRef = doc(db, 'users', userId);
+      getDoc(userRef)
+        .then((snap) => {
+          if (snap.exists() && !snap.data()?.sealDesign) {
+            return setDoc(userRef, {
+              sealDesign: {
+                designType: 'STANDARD',
+                borderStyle: 'DOUBLE_RING',
+                fontFamily: 'SERIF_CLASSIC',
+                emblem: 'SCALES_OF_JUSTICE',
+                inkColor: '#1E3A8A',
+                updatedAt: new Date().toISOString(),
+              },
+            }, { merge: true });
+          }
+        })
+        .catch((err) => console.warn('Default seal provisioning notice:', err?.message));
     } else if (status === 'REJECTED') {
       notifyUser(
         userId,

@@ -1911,6 +1911,9 @@ export const DailyCommissioningRoom: React.FC = () => {
                     stationOrCourt={activeRequest.assignedProfessionalStation || 'HIGH COURT OF UGANDA'}
                     serialNumber={`UG-CFO-2026-${activeRequest.certificateNumber.slice(-4)}`}
                     size="lg"
+                    borderStyle={currentUser.sealDesign?.borderStyle}
+                    emblem={currentUser.sealDesign?.emblem}
+                    inkColor={currentUser.sealDesign?.inkColor}
                   />
                 </div>
 

@@ -1,22 +1,31 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { 
-  Award, 
-  Sparkles, 
-  Crown, 
-  Check, 
-  ShieldCheck, 
-  Scale, 
-  Building, 
-  Palette, 
-  Type, 
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../../services/firebase';
+import { isCommissionerLike } from '../../services/roleService';
+import {
+  Award,
+  Sparkles,
+  Crown,
+  Check,
+  ShieldCheck,
+  Scale,
+  Building,
+  Palette,
+  Type,
   CircleDot,
   CheckCircle2,
-  Lock
+  Lock,
+  AlertTriangle
 } from 'lucide-react';
 
 export const SealStudio: React.FC = () => {
   const { currentUser, updateCurrentUser, addNotification, executePayment } = useApp();
+
+  // Commissioner-like accounts can design a seal ahead of time, but it can
+  // only actually be used to commission a document once they're admitted —
+  // matching the marketplace/commissioning gate itself (see admissionStatus).
+  const isPendingCommissioner = isCommissionerLike(currentUser.role) && currentUser.admissionStatus !== 'ADMITTED';
 
   const [sealTier, setSealTier] = useState<'STANDARD' | 'CUSTOM'>(
     currentUser.sealDesign?.designType === 'CUSTOM' ? 'CUSTOM' : 'STANDARD'
@@ -65,20 +74,27 @@ export const SealStudio: React.FC = () => {
       }
     }
 
-    updateCurrentUser({
-      sealDesign: {
-        designType: sealTier,
-        borderStyle,
-        fontFamily,
-        emblem,
-        inkColor,
-        updatedAt: new Date().toISOString()
-      }
-    });
+    const sealDesign = {
+      designType: sealTier,
+      borderStyle,
+      fontFamily,
+      emblem,
+      inkColor,
+      updatedAt: new Date().toISOString()
+    };
+
+    try {
+      await setDoc(doc(db, 'users', currentUser.id), { sealDesign }, { merge: true });
+    } catch (err) {
+      console.warn('Failed to persist seal design:', err);
+    }
+    updateCurrentUser({ sealDesign });
 
     addNotification(
       'Seal Design Saved',
-      `Your ${sealTier === 'CUSTOM' ? 'Custom Chambers Seal' : 'Standard Statutory Seal'} is active and will be used during document commissioning.`,
+      isPendingCommissioner
+        ? `Your ${sealTier === 'CUSTOM' ? 'Custom Chambers Seal' : 'Standard Statutory Seal'} is saved and will apply automatically once your commissioner admission is approved.`
+        : `Your ${sealTier === 'CUSTOM' ? 'Custom Chambers Seal' : 'Standard Statutory Seal'} is active and will be used during document commissioning.`,
       'SYSTEM'
     );
   };
@@ -108,6 +124,15 @@ export const SealStudio: React.FC = () => {
           Configure your official digital stamp. The engine pulls your verified full name, practising station, and statutory warrant basis directly from your verified credentials.
         </p>
       </div>
+
+      {isPendingCommissioner && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-amber-800 text-xs">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            Your commissioner admission is still under Master Admin review. You can design and save your stamp now, but it will only become usable for commissioning once your account is admitted.
+          </span>
+        </div>
+      )}
 
       {/* Main Studio Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

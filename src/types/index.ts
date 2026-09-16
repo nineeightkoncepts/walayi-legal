@@ -179,11 +179,19 @@ export interface UserProfile {
   signatureDataUrl?: string;
   signatureUploadedAt?: string;
   signatureType?: 'DRAWN' | 'UPLOADED';
-  sealDesignType?: 'STANDARD' | 'CUSTOM';
-  sealCustomBorder?: 'CLASSIC_DOUBLE' | 'ORNATE_GOLD' | 'OFFICIAL_SECURITY' | 'MODERN_GEOMETRIC';
-  sealCustomTypography?: 'SERIF_LEGAL' | 'SANS_MODERN' | 'MONO_OFFICIAL';
-  sealCustomEmbellishment?: 'COURT_SCALES' | 'NATIONAL_CREST' | 'UGANDA_CRANE' | 'LAW_SOCIETY';
-  sealCustomColor?: string;
+  // This professional's configured digital stamp/seal, applied during the
+  // Official Seal ceremony step. Every commissioner-like account is given a
+  // STANDARD default the moment they're admitted (see setCommissionerAdmission)
+  // so a stamp is always available without requiring a manual Seal Studio
+  // visit; CUSTOM designs are opt-in and persisted the same way.
+  sealDesign?: {
+    designType: 'STANDARD' | 'CUSTOM';
+    borderStyle: 'DOUBLE_RING' | 'SERRATED_NOTARIAL' | 'ORNATE_HIGH_COURT';
+    fontFamily: 'SERIF_CLASSIC' | 'SANS_MODERN' | 'GOTHIC_LEGAL';
+    emblem: 'SCALES_OF_JUSTICE' | 'CRANE_UGANDA' | 'COURT_CREST' | 'NONE';
+    inkColor: string;
+    updatedAt: string;
+  };
   judicialDesignation?: string;
   jpJurisdictionStation?: string;
   isPrisonOfficerJP?: boolean;
