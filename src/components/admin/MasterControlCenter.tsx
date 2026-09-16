@@ -7,6 +7,7 @@ import { OverallWalletSection } from './OverallWalletSection';
 import { DocumentsManagementSection } from './DocumentsManagementSection';
 import { ProfessionalNetworkSection } from './ProfessionalNetworkSection';
 import { CredentialVerificationQueue } from './CredentialVerificationQueue';
+import { CommissionerAdmissionQueue } from './CommissionerAdmissionQueue';
 import { AdminAuditLogSection } from './AdminAuditLogSection';
 import { StatutoryLegalRulesSection } from './StatutoryLegalRulesSection';
 import { AdvertisingSection } from './AdvertisingSection';
@@ -39,7 +40,8 @@ export const MasterControlCenter: React.FC = () => {
     setOperatingView,
     users,
     credentialDocs,
-    disputes
+    disputes,
+    commissionerAdmissions
   } = useApp();
 
   const [showApiConfigModal, setShowApiConfigModal] = React.useState(false);
@@ -54,6 +56,10 @@ export const MasterControlCenter: React.FC = () => {
 
   const openDisputesCount = disputes.filter(d => d.status === 'OPEN').length;
 
+  const pendingAdmissionsCount = commissionerAdmissions.filter(
+    u => !u.admissionStatus || u.admissionStatus === 'PENDING'
+  ).length;
+
   const navTabs: { id: MasterAdminSection; label: string; icon: React.ElementType; badge?: number }[] = [
     { id: 'OVERVIEW', label: 'Platform Overview', icon: Scale },
     { id: 'FINANCIAL', label: 'Financial & Revenue Hub', icon: TrendingUp },
@@ -61,6 +67,7 @@ export const MasterControlCenter: React.FC = () => {
     { id: 'DOCUMENTS', label: 'Document Archive & Hashes', icon: FileText },
     { id: 'PROFESSIONALS', label: 'Professional Network', icon: Users },
     { id: 'VERIFICATION_QUEUE', label: 'Credential Review Queue', icon: Clock, badge: pendingDocsCount > 0 ? pendingDocsCount : undefined },
+    { id: 'ADMISSIONS', label: 'Commissioner Admissions', icon: ShieldCheck, badge: pendingAdmissionsCount > 0 ? pendingAdmissionsCount : undefined },
     { id: 'AUDIT_LOGS', label: 'Audit Trail Logs', icon: Lock },
     { id: 'RULES_FEES', label: 'Statutory Policy & Fees', icon: BookOpen },
     { id: 'ADVERTISING', label: 'Advertising Control Centre', icon: Sparkles },
@@ -167,6 +174,7 @@ export const MasterControlCenter: React.FC = () => {
         {masterAdminSection === 'DOCUMENTS' && <DocumentsManagementSection />}
         {masterAdminSection === 'PROFESSIONALS' && <ProfessionalNetworkSection />}
         {masterAdminSection === 'VERIFICATION_QUEUE' && <CredentialVerificationQueue />}
+        {masterAdminSection === 'ADMISSIONS' && <CommissionerAdmissionQueue />}
         {masterAdminSection === 'AUDIT_LOGS' && <AdminAuditLogSection />}
         {masterAdminSection === 'RULES_FEES' && <StatutoryLegalRulesSection />}
         {masterAdminSection === 'ADVERTISING' && <AdvertisingSection />}

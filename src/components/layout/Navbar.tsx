@@ -61,6 +61,8 @@ export const Navbar: React.FC = () => {
     addNotification,
     notifications,
     markNotificationRead,
+    dismissNotification,
+    dismissAllNotifications,
     deviceMode,
     setDeviceMode,
     requests
@@ -78,6 +80,7 @@ export const Navbar: React.FC = () => {
   const [quickVerifyQuery, setQuickVerifyQuery] = useState('');
 
   const profilePanelRef = useRef<HTMLDivElement>(null);
+  const notifPanelRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Navigate to the dedicated sign in / sign up / forgot password page
@@ -101,6 +104,19 @@ export const Navbar: React.FC = () => {
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showProfilePanel]);
+
+  // Close notifications dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (notifPanelRef.current && !notifPanelRef.current.contains(e.target as Node)) {
+        setShowNotifMenu(false);
+      }
+    };
+    if (showNotifMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showNotifMenu]);
 
   // Handle Photo Upload directly from the Profile Panel
   const handleProfilePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -208,8 +224,88 @@ export const Navbar: React.FC = () => {
 
             {/* PWA Install Button blinking in the address-bar / navigation area */}
             <PWAInstallButton variant="nav" />
-            
+
             <div className="h-4 w-px bg-slate-200 mx-1" />
+
+            {/* Notification Bell — persisted, backend-driven notifications only */}
+            {isSignedIn && (
+              <div className="relative" ref={notifPanelRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowNotifMenu(prev => !prev)}
+                  className="relative p-2 rounded-xl hover:bg-slate-100/80 transition-all cursor-pointer"
+                  id="btn-notification-bell"
+                  aria-expanded={showNotifMenu}
+                  title="Notifications"
+                >
+                  <Bell className="w-4 h-4 text-slate-600" />
+                  {unreadNotifs.length > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center leading-none">
+                      {unreadNotifs.length > 9 ? '9+' : unreadNotifs.length}
+                    </span>
+                  )}
+                </button>
+
+                {showNotifMenu && (
+                  <div
+                    className="absolute right-0 mt-2 w-80 max-w-[90vw] bg-white border border-slate-200 rounded-3xl shadow-2xl z-50 animate-scaleUp text-slate-900 overflow-hidden"
+                    id="notifications-dropdown-panel"
+                  >
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                      <span className="text-[11px] font-black uppercase tracking-widest text-slate-900">Notifications</span>
+                      {unreadNotifs.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={dismissAllNotifications}
+                          className="text-[10px] font-bold text-[#0097A7] hover:underline cursor-pointer"
+                          id="btn-notifications-mark-all-read"
+                        >
+                          Mark all read
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="max-h-96 overflow-y-auto divide-y divide-slate-50">
+                      {notifications.length === 0 ? (
+                        <div className="px-4 py-8 text-center text-[11px] text-slate-400">
+                          No notifications yet.
+                        </div>
+                      ) : (
+                        notifications.slice(0, 25).map((n) => (
+                          <div
+                            key={n.id}
+                            onClick={() => !n.read && markNotificationRead(n.id)}
+                            className={`px-4 py-3 flex items-start gap-2.5 cursor-pointer transition-colors ${n.read ? 'bg-white' : 'bg-teal-50/60 hover:bg-teal-50'}`}
+                            id={`notification-item-${n.id}`}
+                          >
+                            <span className={`mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0 ${n.read ? 'bg-slate-300' : 'bg-[#0097A7]'}`} />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[11px] font-bold text-slate-900 truncate">{n.title}</p>
+                              <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{n.message}</p>
+                              <p className="text-[9px] text-slate-400 mt-1 uppercase tracking-wide">
+                                {new Date(n.timestamp).toLocaleString()}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                dismissNotification(n.id);
+                              }}
+                              className="p-1 rounded-lg hover:bg-slate-200/70 text-slate-400 hover:text-slate-600 flex-shrink-0 cursor-pointer"
+                              title="Dismiss"
+                              id={`btn-dismiss-notification-${n.id}`}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Profile Button with Embedded Panel */}
             <div className="relative" ref={profilePanelRef}>

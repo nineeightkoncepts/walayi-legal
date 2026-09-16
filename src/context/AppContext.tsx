@@ -34,7 +34,7 @@ import {
 import { checkCommissionerConflict } from '../utils/conflictValidation';
 import { PaymentAdapter } from '../services/paymentService';
 import { auth, fbSignOut, onAuthStateChanged, db } from '../services/firebase';
-import { doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, query as fsQuery, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, onSnapshot, collection, query as fsQuery, where, getDocs } from 'firebase/firestore';
 import { getStoredProfilePhoto } from '../services/profilePhotoService';
 import { isSuperAdminEmail, isCommissionerLike } from '../services/roleService';
 import { PRESENCE_HEARTBEAT_INTERVAL_MS } from '../services/presenceService';
@@ -61,6 +61,7 @@ export type AppView =
 interface AppContextType {
   currentUser: UserProfile;
   users: UserProfile[];
+  commissionerAdmissions: UserProfile[];
   requests: CommissioningRequest[];
   credentialDocs: Record<string, CredentialDocument[]>;
   policyRules: LegalPolicyRule[];
@@ -112,11 +113,24 @@ interface AppContextType {
   dismissNotification: (id: string) => void;
   dismissAllNotifications: () => void;
   addNotification: (title: string, message: string, type: NotificationItem['type']) => void;
+  notifyUser: (
+    targetUserId: string,
+    title: string,
+    message: string,
+    type: NotificationItem['type'],
+    linkedId?: string,
+    linkedType?: NotificationItem['linkedType']
+  ) => void;
   verifyDocumentByCertOrHash: (query: string) => Promise<CommissioningRequest | undefined>;
   logAdminAction: (log: Omit<AdminAuditEvent, 'id' | 'timestamp' | 'adminEmail' | 'adminName'>) => void;
   processRefund: (transactionId: string, reason: string) => Promise<boolean>;
   resolveDispute: (id: string, resolution: 'REFUND' | 'RELEASE' | 'DISMISS', note?: string) => void;
   toggleProfessionalStatus: (userId: string, action: 'SUSPEND' | 'REINSTATE' | 'APPROVE' | 'REJECT', reason?: string) => void;
+  setCommissionerAdmission: (
+    userId: string,
+    status: 'ADMITTED' | 'REJECTED' | 'SUSPENDED',
+    reason?: string
+  ) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -145,6 +159,13 @@ const createGuestUser = (): UserProfile => ({
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<UserProfile[]>(INITIAL_USERS);
+  // Every commissioner-like account, of every admissionStatus (PENDING,
+  // ADMITTED, REJECTED, SUSPENDED, EXPIRED, or unset legacy) — populated only
+  // for a Master Admin, since this is the review queue for admitting
+  // professionals onto the marketplace (see the admission queue effect
+  // below). Deliberately kept separate from `users`, which only ever holds
+  // ADMITTED commissioners for the public marketplace.
+  const [commissionerAdmissions, setCommissionerAdmissions] = useState<UserProfile[]>([]);
   // Always start blank. If a previous Firebase session is still valid, the
   // onAuthStateChanged listener below fills in the real profile moments
   // after mount — the app never guesses or assumes an identity up front.
@@ -361,17 +382,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // ---------------------------------------------------------------------------
   // Live commissioner directory.
-  // Any account registered with a commissioner-like role is surfaced on the
-  // marketplace and made selectable in the commissioning workflow the moment
-  // it is created — no separate verification/approval step. We stream the
-  // `users` collection and merge those professionals into local state.
+  // Only accounts the Master Admin has expressly ADMITTED are surfaced on
+  // the marketplace and made selectable in the commissioning workflow — a
+  // commissioner-category account starts PENDING at sign-up and stays out
+  // of this list until admitted. This filter is enforced at the Firestore
+  // query itself (not a client-side check layered on top of an unfiltered
+  // fetch), so a PENDING account is never even downloaded into this list —
+  // and, by construction, any commissioner account that existed before this
+  // field was introduced (admissionStatus is unset) is excluded too, i.e.
+  // it fails closed into a safe pending state rather than being assumed
+  // admitted.
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!isSignedIn) return;
 
     let unsub: (() => void) | undefined;
     try {
-      unsub = onSnapshot(collection(db, 'users'), (snap) => {
+      const admittedCommissionersQuery = fsQuery(collection(db, 'users'), where('admissionStatus', '==', 'ADMITTED'));
+      unsub = onSnapshot(admittedCommissionersQuery, (snap) => {
         const commissioners: UserProfile[] = [];
 
         snap.forEach((d) => {
@@ -463,6 +491,72 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [isSignedIn]);
 
   // ---------------------------------------------------------------------------
+  // Commissioner admission queue (Master Admin only).
+  // Unlike the marketplace directory above, this fetches EVERY commissioner-
+  // like account regardless of admissionStatus, so a Master Admin can see
+  // who's waiting (PENDING), who's already ADMITTED, and who was REJECTED/
+  // SUSPENDED — this is the real review queue behind the ADMISSIONS admin tab.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!isSignedIn || !isMasterAdmin) {
+      setCommissionerAdmissions([]);
+      return;
+    }
+
+    let unsub: (() => void) | undefined;
+    try {
+      unsub = onSnapshot(collection(db, 'users'), (snap) => {
+        const commissionerAccounts: UserProfile[] = [];
+        snap.forEach((d) => {
+          const data: any = d.data() || {};
+          const role = (data.role || '').toLowerCase();
+          const email = (data.email || '').toLowerCase();
+          const isCommissionerLikeAccount =
+            ['commissioner', 'notary', 'judicial_officer', 'justice_of_peace'].includes(role) ||
+            data.professionalCategory === 'commissioner_for_oaths' ||
+            email.includes('commissioner');
+          if (!isCommissionerLikeAccount) return;
+
+          commissionerAccounts.push({
+            id: data.id || d.id,
+            fullName: data.fullName || data.displayName || (email ? email.split('@')[0] : 'Commissioner'),
+            email: data.email || '',
+            phone: data.phone || data.phoneNumber || '',
+            role: (['commissioner', 'notary', 'judicial_officer', 'justice_of_peace'].includes(role) ? role : 'commissioner') as UserRole,
+            avatarUrl: data.avatarUrl || data.profilePhotoUrl || '',
+            nationalIdNumber: data.nationalIdNumber || undefined,
+            stationCity: data.location || data.stationCity || 'Kampala',
+            lawFirmName: data.lawFirmName || data.firmName || 'Independent Chambers',
+            firmName: data.firmName || null,
+            professionalCategory: 'commissioner_for_oaths',
+            authorities: [],
+            isProSubscriber: !!data.isProSubscriber,
+            rating: typeof data.rating === 'number' ? data.rating : 5.0,
+            reviewCount: data.reviewCount || 0,
+            completedCeremoniesCount: data.completedCeremoniesCount || 0,
+            averageResponseMinutes: data.averageResponseMinutes || 5,
+            indicativeFeeUGX: typeof data.fee === 'number' ? data.fee : (data.indicativeFeeUGX || 25000),
+            availableNow: !!data.availableNow,
+            allowsRemote: data.allowsRemote !== undefined ? !!data.allowsRemote : true,
+            lastActiveAt: data.lastActiveAt || undefined,
+            admissionStatus: data.admissionStatus || null,
+            admissionDecisionAt: data.admissionDecisionAt || undefined,
+            admissionDecisionBy: data.admissionDecisionBy || undefined,
+            admissionDecisionReason: data.admissionDecisionReason || undefined,
+          });
+        });
+        setCommissionerAdmissions(commissionerAccounts);
+      }, (err) => console.warn('Admission queue listener notice:', err?.message));
+    } catch (e) {
+      console.warn('Could not attach admission queue listener', e);
+    }
+
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [isSignedIn, isMasterAdmin]);
+
+  // ---------------------------------------------------------------------------
   // Presence heartbeat.
   // Firestore has no server-side "disconnect" hook (unlike Realtime Database's
   // onDisconnect), so live "who's online" is approximated: while a signed-in
@@ -487,6 +581,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', beat);
+    };
+  }, [isSignedIn, currentUser.id]);
+
+  // ---------------------------------------------------------------------------
+  // Live notifications.
+  // Notifications are stored server-side in a `notifications` collection and
+  // scoped to the signed-in user's own id, so read/unread state and the
+  // notification list itself survive reloads and other devices, and a
+  // notification is only ever shown when a real Firestore document (written
+  // by an authoritative backend event) says so.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!isSignedIn || !currentUser.id || currentUser.id === 'guest-deponent') {
+      setNotifications([]);
+      return;
+    }
+
+    let unsub: (() => void) | undefined;
+    try {
+      const myNotificationsQuery = fsQuery(collection(db, 'notifications'), where('userId', '==', currentUser.id));
+      unsub = onSnapshot(myNotificationsQuery, (snap) => {
+        const items: NotificationItem[] = [];
+        snap.forEach((d) => {
+          const data: any = d.data() || {};
+          items.push({
+            id: d.id,
+            userId: data.userId,
+            title: data.title || '',
+            message: data.message || '',
+            type: data.type || 'SYSTEM',
+            timestamp: data.timestamp || new Date().toISOString(),
+            read: !!data.read,
+            actionUrl: data.actionUrl || undefined,
+            linkedId: data.linkedId || undefined,
+            linkedType: data.linkedType || undefined,
+          });
+        });
+        items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        setNotifications(items);
+      }, (err) => console.warn('Notifications listener notice:', err?.message));
+    } catch (e) {
+      console.warn('Could not attach notifications listener', e);
+    }
+
+    return () => {
+      if (unsub) unsub();
     };
   }, [isSignedIn, currentUser.id]);
 
@@ -531,26 +671,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    {
-      id: 'notif-1',
-      userId: 'user-client-1',
-      title: 'Affidavit Successfully Commissioned',
-      message: 'Certificate WAL-UG-2026-8849 is minted and ready for ECCMIS court filing.',
-      type: 'VERIFICATION',
-      timestamp: '2026-08-30T10:28:00Z',
-      read: false
-    },
-    {
-      id: 'notif-2',
-      userId: 'cfo-1',
-      title: 'New Commissioning Request Received',
-      message: 'Grace Akello submitted a Statutory Declaration for review.',
-      type: 'CEREMONY',
-      timestamp: '2026-08-31T08:00:00Z',
-      read: false
-    }
-  ]);
+  // Notifications are persisted server-side (Firestore `notifications`
+  // collection, see the live query effect below) and scoped to whichever
+  // user is currently signed in — no local seed data, since a notification
+  // must never be shown unless it reflects a real backend event.
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   const logAdminAction = (log: Omit<AdminAuditEvent, 'id' | 'timestamp' | 'adminEmail' | 'adminName'>) => {
     const newLog: AdminAuditEvent = {
@@ -869,6 +994,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       `${userObj?.fullName || 'Professional'} status updated to ${newStatus}.`,
       'SYSTEM'
     );
+  };
+
+  // The real enforcement point for Section 3/11 of the brief: a Master Admin
+  // reviewing the admission queue and deciding whether a commissioner-like
+  // account may participate in the marketplace. Writes admissionStatus to
+  // the user's own Firestore doc (the source of truth the marketplace
+  // directory query and commissioningRequests create rule both read from),
+  // then notifies that commissioner on their own device — never the admin's.
+  const setCommissionerAdmission = (
+    userId: string,
+    status: 'ADMITTED' | 'REJECTED' | 'SUSPENDED',
+    reason?: string
+  ) => {
+    const userObj = commissionerAdmissions.find(u => u.id === userId) || users.find(u => u.id === userId);
+    const decisionAt = new Date().toISOString();
+
+    setCommissionerAdmissions(prev => prev.map(u => (
+      u.id === userId
+        ? { ...u, admissionStatus: status, admissionDecisionAt: decisionAt, admissionDecisionBy: currentUser.email, admissionDecisionReason: reason }
+        : u
+    )));
+
+    updateDoc(doc(db, 'users', userId), {
+      admissionStatus: status,
+      admissionDecisionAt: decisionAt,
+      admissionDecisionBy: currentUser.email,
+      admissionDecisionReason: reason || null,
+    }).catch((err) => console.warn('Commissioner admission notice:', err?.message));
+
+    logAdminAction({
+      action: `COMMISSIONER_ADMISSION_${status}`,
+      targetType: 'USER',
+      targetId: userId,
+      targetName: userObj?.fullName || 'Commissioner',
+      previousStatus: userObj?.admissionStatus || 'PENDING',
+      newStatus: status,
+      reason: reason || `Master Admin set admission status to ${status}.`
+    });
+
+    if (status === 'ADMITTED') {
+      notifyUser(
+        userId,
+        'You have been approved as a WALAYI Commissioner',
+        'Your professional profile is now eligible for marketplace participation.',
+        'SUCCESS',
+        userId,
+        'admission'
+      );
+    } else if (status === 'REJECTED') {
+      notifyUser(
+        userId,
+        'Commissioner Application Not Approved',
+        reason || 'Your application for admission to the WALAYI marketplace was not approved.',
+        'ALERT',
+        userId,
+        'admission'
+      );
+    } else {
+      notifyUser(
+        userId,
+        'Marketplace Access Suspended',
+        reason || 'Your marketplace participation has been suspended by WALAYI administration.',
+        'ALERT',
+        userId,
+        'admission'
+      );
+    }
   };
 
   const processRefund = async (transactionId: string, reason: string): Promise<boolean> => {
@@ -1326,27 +1518,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const markNotificationRead = (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    updateDoc(doc(db, 'notifications', id), { read: true }).catch((err) =>
+      console.warn('Mark notification read notice:', err?.message)
+    );
   };
 
   const dismissNotification = (id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
+    deleteDoc(doc(db, 'notifications', id)).catch((err) =>
+      console.warn('Dismiss notification notice:', err?.message)
+    );
   };
 
   const dismissAllNotifications = () => {
+    const idsToClear = notifications.filter(n => !n.read).map(n => n.id);
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    idsToClear.forEach((id) => {
+      updateDoc(doc(db, 'notifications', id), { read: true }).catch((err) =>
+        console.warn('Dismiss-all notification notice:', err?.message)
+      );
+    });
   };
 
+  // Creates a notification for the CURRENT user (e.g. confirming their own
+  // action succeeded). For notifying a different user of an event concerning
+  // them (e.g. an admin admitting a commissioner), use notifyUser instead.
   const addNotification = (title: string, message: string, type: NotificationItem['type']) => {
-    const newNotif: NotificationItem = {
-      id: `notif-${Date.now()}`,
-      userId: currentUser.id,
+    notifyUser(currentUser.id, title, message, type);
+  };
+
+  // Writes a persisted notification for an arbitrary target user. This is the
+  // real cross-user delivery mechanism — e.g. a Master Admin admitting a
+  // commissioner notifies that commissioner's own device, not the admin's.
+  const notifyUser = (
+    targetUserId: string,
+    title: string,
+    message: string,
+    type: NotificationItem['type'],
+    linkedId?: string,
+    linkedType?: NotificationItem['linkedType']
+  ) => {
+    if (!targetUserId) return;
+    const newNotif: Omit<NotificationItem, 'id'> = {
+      userId: targetUserId,
       title,
       message,
       type,
       timestamp: new Date().toISOString(),
-      read: false
+      read: false,
+      ...(linkedId ? { linkedId } : {}),
+      ...(linkedType ? { linkedType } : {}),
     };
-    setNotifications(prev => [newNotif, ...prev]);
+
+    // No manual optimistic update needed here: when the target is the
+    // current user, Firestore's SDK echoes the pending local write straight
+    // into the live query above before the server round-trip completes.
+    addDoc(collection(db, 'notifications'), newNotif).catch((err) =>
+      console.warn('Notify user notice:', err?.message)
+    );
   };
 
   const verifyDocumentByCertOrHash = async (query: string): Promise<CommissioningRequest | undefined> => {
@@ -1426,6 +1655,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider value={{
       currentUser,
       users,
+      commissionerAdmissions,
       requests,
       credentialDocs,
       policyRules,
@@ -1469,11 +1699,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dismissNotification,
       dismissAllNotifications,
       addNotification,
+      notifyUser,
       verifyDocumentByCertOrHash,
       logAdminAction,
       processRefund,
       resolveDispute,
-      toggleProfessionalStatus
+      toggleProfessionalStatus,
+      setCommissionerAdmission
     }}>
       {children}
     </AppContext.Provider>

@@ -54,7 +54,18 @@ service cloud.firestore {
     // Commissioning Requests Collection (public read for verification portal)
     match /commissioningRequests/{requestId} {
       allow read: if true;
-      allow create: if isSignedIn();
+      // A request may only be created against a commissioner who is
+      // actually ADMITTED — this is the real enforcement point for
+      // "only an admitted professional can receive commissioning
+      // requests" (see the users collection's admissionStatus field).
+      // Checked server-side so a client bypassing the marketplace UI
+      // (e.g. crafting the write directly) still can't target a
+      // PENDING/REJECTED/SUSPENDED/EXPIRED commissioner.
+      allow create: if isSignedIn() && (
+        !('assignedProfessionalId' in request.resource.data) ||
+        request.resource.data.assignedProfessionalId == null ||
+        get(/databases/$(database)/documents/users/$(request.resource.data.assignedProfessionalId)).data.admissionStatus == 'ADMITTED'
+      );
       allow update: if isSignedIn();
       allow delete: if isAdmin();
     }
@@ -71,6 +82,31 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isSignedIn();
       allow update, delete: if isAdmin();
+    }
+
+    // In-App Notifications
+    // A notification is delivered to a specific user (userId) by a DIFFERENT
+    // actor (e.g. an admin admitting a commissioner, or the system logging a
+    // ceremony event) — so create is any signed-in user, mirroring
+    // commissioningRequests' posture, but read/update/delete are restricted
+    // to the notification's own owner (or an admin), so nobody can read or
+    // tamper with another user's notification feed.
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.userId is string;
+      // Only marking read/unread (or an admin) is permitted — the owner may
+      // not rewrite title/message/type after the fact.
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        (
+          resource.data.userId == request.auth.uid &&
+          request.resource.data.userId == resource.data.userId &&
+          request.resource.data.title == resource.data.title &&
+          request.resource.data.message == resource.data.message &&
+          request.resource.data.type == resource.data.type
+        )
+      );
+      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
   }
 }

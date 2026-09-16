@@ -297,7 +297,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onVerifyInstead }) => {
           location: 'Kampala',
           verified: false,
           fee: userRole === 'commissioner' ? 25000 : 0,
-          status: userRole === 'commissioner' ? 'PENDING' : 'ADMITTED',
+          // Commissioner-category accounts start PENDING and stay out of the
+          // marketplace until the Master Admin expressly admits them — this
+          // is enforced server-side (see the live directory query in
+          // AppContext.tsx and the commissioningRequests create rule), not
+          // just a frontend default. Google auth never assigns professional
+          // privileges automatically, matching that same gate.
+          admissionStatus: userRole === 'commissioner' ? 'PENDING' : null,
           authProvider: 'google'
         }, { merge: true });
       }
@@ -388,7 +394,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onVerifyInstead }) => {
         location: 'Kampala',
         verified: false,
         fee: role === 'commissioner' ? 25000 : 0,
-        status: role === 'commissioner' ? 'PENDING' : 'ADMITTED'
+        // See the matching comment in handleGoogleAuth above: PENDING until
+        // the Master Admin expressly admits this account, enforced
+        // server-side, not just hidden client-side.
+        admissionStatus: role === 'commissioner' ? 'PENDING' : null
       };
 
       try {

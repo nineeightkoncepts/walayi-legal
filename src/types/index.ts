@@ -20,6 +20,7 @@ export type MasterAdminSection =
   | 'DOCUMENTS'
   | 'PROFESSIONALS'
   | 'VERIFICATION_QUEUE'
+  | 'ADMISSIONS'
   | 'ADVERTISING'
   | 'TRANSACTIONS'
   | 'PAYOUTS'
@@ -152,6 +153,18 @@ export interface UserProfile {
   // (see isUserOnline in roleService); it is not the same as availableNow,
   // which is a manually-set "willing to take new work" preference.
   lastActiveAt?: string;
+  // Commissioner-category admission gate. A commissioner-like account is
+  // PENDING from sign-up until the Master Admin expressly admits them —
+  // only ADMITTED accounts are searchable/selectable/able to receive
+  // commissioning requests (enforced server-side, not just hidden in the
+  // UI). Unset (null/undefined) for non-commissioner roles, and — by
+  // design — for any commissioner account that existed before this gate,
+  // so pre-existing accounts fail closed into a safe pending state rather
+  // than being assumed admitted.
+  admissionStatus?: 'PENDING' | 'ADMITTED' | 'REJECTED' | 'SUSPENDED' | 'EXPIRED' | null;
+  admissionDecisionAt?: string;
+  admissionDecisionBy?: string;
+  admissionDecisionReason?: string;
   bio?: string;
   physicalChambersAddress?: string;
   signatureDataUrl?: string;
@@ -448,10 +461,15 @@ export interface NotificationItem {
   userId: string;
   title: string;
   message: string;
-  type: 'CEREMONY' | 'PAYMENT' | 'CREDENTIAL' | 'VERIFICATION' | 'SYSTEM';
+  type: 'CEREMONY' | 'PAYMENT' | 'CREDENTIAL' | 'VERIFICATION' | 'SYSTEM' | 'ALERT' | 'SUCCESS' | 'INFO';
   timestamp: string;
   read: boolean;
   actionUrl?: string;
+  // Ties this notification back to the record it's about, per the brief's
+  // "link notifications to the relevant document or transaction" — the app
+  // doesn't have deep-linking yet, but the data is captured either way.
+  linkedId?: string;
+  linkedType?: 'commissioningRequest' | 'transaction' | 'credentialDocument' | 'admission';
 }
 
 export interface ReviewItem {
