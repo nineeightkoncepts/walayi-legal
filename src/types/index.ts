@@ -377,6 +377,18 @@ export interface CommissioningRequest {
   // Where the commissioner's signature + digital stamp block should be
   // placed on the real document. Same fallback behaviour as above.
   commissionerMarkPlacement?: DocumentMarkPlacement;
+  // The commissioner's stamp design AT THE MOMENT the seal was affixed
+  // (ceremony Stage 11) — snapshotted here, not read live off their
+  // profile, so "retain the stamp version in the completed record" holds
+  // even if they later change their Seal Studio design, and the finished
+  // instrument can never be silently altered after finalisation.
+  sealDesignSnapshot?: {
+    designType: 'STANDARD' | 'CUSTOM';
+    borderStyle: 'DOUBLE_RING' | 'SERRATED_NOTARIAL' | 'ORNATE_HIGH_COURT';
+    fontFamily: 'SERIF_CLASSIC' | 'SANS_MODERN' | 'GOTHIC_LEGAL';
+    emblem: 'SCALES_OF_JUSTICE' | 'CRANE_UGANDA' | 'COURT_CREST' | 'NONE';
+    inkColor: string;
+  };
 
   status: CommissioningStatus;
   ceremonyStep?: number;

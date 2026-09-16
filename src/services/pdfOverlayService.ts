@@ -50,7 +50,22 @@ function drawCenteredText(page: PDFPage, text: string, cx: number, y: number, si
   page.drawText(text, { x: cx - w / 2, y, size, font, color });
 }
 
-/** Draws the commissioner's official digital stamp — a round dual-ring seal. */
+/** Parses a "#RRGGBB" hex colour into pdf-lib's rgb(), falling back to house ink on any parse failure. */
+function hexToRgb(hex?: string) {
+  if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return INK;
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  return rgb(r, g, b);
+}
+
+/**
+ * Draws the commissioner's official digital stamp — a round seal reflecting
+ * their actual stamp design (ink colour, single vs. double ring) as it was
+ * at the moment the seal was affixed (sealDesignSnapshot on the request),
+ * rather than always the same fixed generic look, so the embedded PDF
+ * matches what was shown and confirmed during the ceremony.
+ */
 export function drawDigitalStamp(
   page: PDFPage,
   font: PDFFont,
@@ -60,11 +75,17 @@ export function drawDigitalStamp(
   radius: number,
   request: CommissioningRequest
 ) {
-  page.drawCircle({ x: cx, y: cy, size: radius, borderColor: INK, borderWidth: 1.4, color: undefined });
-  page.drawCircle({ x: cx, y: cy, size: radius - 5, borderColor: INK, borderWidth: 0.7, color: undefined });
+  const design = request.sealDesignSnapshot;
+  const ink = hexToRgb(design?.inkColor);
+  const isDouble = !design || design.borderStyle !== 'SERRATED_NOTARIAL';
 
-  drawCenteredText(page, 'COMMISSIONER', cx, cy + 11, 6, fontBold);
-  drawCenteredText(page, 'FOR OATHS', cx, cy + 4, 6, fontBold);
+  page.drawCircle({ x: cx, y: cy, size: radius, borderColor: ink, borderWidth: 1.4, color: undefined });
+  if (isDouble) {
+    page.drawCircle({ x: cx, y: cy, size: radius - 5, borderColor: ink, borderWidth: 0.7, color: undefined });
+  }
+
+  drawCenteredText(page, 'COMMISSIONER', cx, cy + 11, 6, fontBold, ink);
+  drawCenteredText(page, 'FOR OATHS', cx, cy + 4, 6, fontBold, ink);
   drawCenteredText(page, 'REPUBLIC OF UGANDA', cx, cy - 6, 4.5, font, MUTED);
   const serial = request.commissionerSealSerial || `UG-CFO-${new Date().getFullYear()}-${request.certificateNumber.slice(-4)}`;
   drawCenteredText(page, serial, cx, cy - 13, 4.5, font, MUTED);

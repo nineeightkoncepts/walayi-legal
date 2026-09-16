@@ -134,6 +134,13 @@ export const SealStudio: React.FC = () => {
         </div>
       )}
 
+      <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-start gap-2.5 text-slate-600 text-xs">
+        <ShieldCheck className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+        <span>
+          This digital stamp does not automatically replace any physical seal, statutory stamp or other professional authority requirement that separately applies to you.
+        </span>
+      </div>
+
       {/* Main Studio Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         

@@ -31,12 +31,13 @@ export const AuditCertificateModal: React.FC<AuditCertificateModalProps> = ({
   onClose
 }) => {
   const { users } = useApp();
-  // The certificate's applied seal must reflect what the commissioning
-  // professional actually configured in Seal Studio, not always the fixed
-  // default look — falls back to the standard design when unset (e.g. the
-  // professional hasn't customized one, or isn't in the local roster).
+  // Once the seal has actually been affixed (ceremony Stage 11), the
+  // permanent record is the snapshot taken at that moment — not whatever
+  // the professional's Seal Studio design happens to be today, which may
+  // have changed since. Before that point (no snapshot yet), fall back to
+  // their live design as a preview.
   const sealOwner = users.find(u => u.id === request.assignedProfessionalId);
-  const sealDesign = sealOwner?.sealDesign;
+  const sealDesign = request.sealDesignSnapshot || sealOwner?.sealDesign;
 
   const [activeTab, setActiveTab] = useState<'instrument' | 'audit'>(initialTab);
   const [copied, setCopied] = useState(false);

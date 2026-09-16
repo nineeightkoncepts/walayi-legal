@@ -344,7 +344,19 @@ export const DailyCommissioningRoom: React.FC = () => {
       advanceCeremonyState(activeRequest.id, 'SIGNING', 'Execution of digital signatures initiated.', { ceremonyStep: 9 });
     } else if (stepNumber === 11) {
       setSealApplied(true);
-      advanceCeremonyState(activeRequest.id, 'COMMISSIONED', 'Official statutory seal and digital stamp applied.', { ceremonyStep: 11 });
+      // Snapshot the commissioner's stamp design as it exists right now —
+      // this becomes the permanent, unchangeable record of what was
+      // actually affixed, independent of any later Seal Studio edit.
+      advanceCeremonyState(activeRequest.id, 'COMMISSIONED', 'Official statutory seal and digital stamp applied.', {
+        ceremonyStep: 11,
+        sealDesignSnapshot: currentUser.sealDesign || {
+          designType: 'STANDARD',
+          borderStyle: 'DOUBLE_RING',
+          fontFamily: 'SERIF_CLASSIC',
+          emblem: 'SCALES_OF_JUSTICE',
+          inkColor: '#1E3A8A',
+        }
+      });
     } else if (stepNumber === 14) {
       // Complete the ceremony and record the commissioner net payout.
       // Settlement to the commissioner is handled off-platform.
