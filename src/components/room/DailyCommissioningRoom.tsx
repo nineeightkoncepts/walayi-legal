@@ -1224,6 +1224,13 @@ export const DailyCommissioningRoom: React.FC = () => {
             sessionId={activeRequest.id}
             userName={currentUser.fullName}
             userRole={isCommissioner ? 'Commissioner' : 'Deponent'}
+            // Exactly one side must create the WebRTC offer when the
+            // built-in (non-Daily) chamber is used — whoever placed the
+            // most recent call does. If that was never recorded (e.g. an
+            // old request resumed past the call step), fall back to a
+            // fixed, still-deterministic rule so both sides never end up
+            // both waiting on each other.
+            isCallInitiator={activeRequest.callInitiatedByRole ? activeRequest.callInitiatedByRole === myRole : isCommissioner}
             onParticipantJoined={(count) => {
               if (count > 1) {
                 setPartnerConnected(true);

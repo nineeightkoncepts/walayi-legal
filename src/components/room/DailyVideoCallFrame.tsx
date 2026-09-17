@@ -22,12 +22,19 @@ import {
 } from 'lucide-react';
 import { ApiConfigService } from '../../services/apiConfigService';
 import { DailyService } from '../../services/dailyService';
+import { db } from '../../services/firebase';
+import { collection, doc, setDoc, updateDoc, addDoc, deleteDoc, getDocs, onSnapshot as onFirestoreSnapshot } from 'firebase/firestore';
 
 interface DailyVideoCallFrameProps {
   sessionId: string;
   userName: string;
   userRole: string;
   initialRoomUrl?: string;
+  // Which side creates the WebRTC offer when using the built-in (non-Daily)
+  // video chamber — see the signaling effect below. Exactly one side must be
+  // true or the two peers never connect; the caller decides this
+  // deterministically (see DailyCommissioningRoom).
+  isCallInitiator?: boolean;
   onParticipantJoined?: (count: number) => void;
   onParticipantLeft?: (count: number) => void;
 }
@@ -37,13 +44,16 @@ export const DailyVideoCallFrame: React.FC<DailyVideoCallFrameProps> = ({
   userName,
   userRole,
   initialRoomUrl,
+  isCallInitiator = false,
   onParticipantJoined,
   onParticipantLeft
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const callFrameRef = useRef<DailyCall | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const isInitializingRef = useRef<boolean>(false);
 
   // Active Video Engine Mode — real Daily.co WebRTC by default; the
@@ -54,7 +64,7 @@ export const DailyVideoCallFrame: React.FC<DailyVideoCallFrameProps> = ({
   const [roomUrl, setRoomUrl] = useState<string>(initialRoomUrl || '');
   const [callState, setCallState] = useState<'IDLE' | 'CONNECTING' | 'JOINED' | 'ERROR'>('IDLE');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [participantCount, setParticipantCount] = useState<number>(2);
+  const [participantCount, setParticipantCount] = useState<number>(1);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const [showConfigModal, setShowConfigModal] = useState<boolean>(false);
 
@@ -62,8 +72,11 @@ export const DailyVideoCallFrame: React.FC<DailyVideoCallFrameProps> = ({
   const [isCameraActive, setIsCameraActive] = useState<boolean>(true);
   const [isMicActive, setIsMicActive] = useState<boolean>(true);
   const [hasMediaPermission, setHasMediaPermission] = useState<boolean>(false);
-  const [audioLevel, setAudioLevel] = useState<number>(65);
-  const [isDeponentSpeaking, setIsDeponentSpeaking] = useState<boolean>(false);
+  // Real peer-to-peer connection state for the built-in chamber (see the
+  // WebRTC signaling effect below) — this used to be faked with
+  // Math.random(), which could show "connected" when nobody was actually
+  // there. It's now the genuine RTCPeerConnection state.
+  const [builtinCallState, setBuiltinCallState] = useState<'WAITING' | 'CONNECTING' | 'CONNECTED' | 'FAILED'>('WAITING');
 
   // Editable Daily Config
   const [customUrlInput, setCustomUrlInput] = useState<string>('');
@@ -76,22 +89,6 @@ export const DailyVideoCallFrame: React.FC<DailyVideoCallFrameProps> = ({
     const config = ApiConfigService.loadConfig().dailyCo;
     setDomainInput(config.domain || 'https://wallahi.daily.co');
   }, [initialRoomUrl]);
-
-  // Audio level simulator for built-in video feed
-  useEffect(() => {
-    if (videoMode !== 'BUILTIN_COURT') return;
-    const interval = setInterval(() => {
-      if (isMicActive) {
-        const level = Math.floor(40 + Math.random() * 50);
-        setAudioLevel(level);
-        setIsDeponentSpeaking(Math.random() > 0.4);
-      } else {
-        setAudioLevel(0);
-        setIsDeponentSpeaking(false);
-      }
-    }, 800);
-    return () => clearInterval(interval);
-  }, [videoMode, isMicActive]);
 
   // Initialize Built-in Local Camera Stream
   const initBuiltinCamera = useCallback(async () => {
@@ -113,20 +110,163 @@ export const DailyVideoCallFrame: React.FC<DailyVideoCallFrameProps> = ({
     }
   }, []);
 
-  // Update built-in video element when camera/stream changes
+  // Real peer-to-peer WebRTC connection for the built-in chamber — no Daily.co
+  // account required. Signaling (the SDP offer/answer and ICE candidates
+  // exchanged to establish the direct connection) rides through Firestore,
+  // reusing the same real-time infrastructure every other live feature in
+  // this app already depends on. Exactly one side (isCallInitiator) creates
+  // the offer; the other answers it. Uses public STUN servers only (no
+  // TURN relay), which connects the large majority of real-world networks
+  // but — unlike a service such as Daily.co — has no relay fallback for a
+  // symmetric-NAT/very restrictive network on both ends simultaneously.
   useEffect(() => {
-    if (videoMode === 'BUILTIN_COURT') {
-      initBuiltinCamera();
-      onParticipantJoined?.(2);
-    }
+    if (videoMode !== 'BUILTIN_COURT') return;
 
-    return () => {
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => track.stop());
-        localStreamRef.current = null;
+    let cancelled = false;
+    let pc: RTCPeerConnection | null = null;
+    let unsubDoc: (() => void) | undefined;
+    let unsubOfferCandidates: (() => void) | undefined;
+    let unsubAnswerCandidates: (() => void) | undefined;
+    const pendingRemoteCandidates: RTCIceCandidateInit[] = [];
+
+    const sessionDocRef = doc(db, 'webrtcSessions', sessionId);
+    const offerCandidatesRef = collection(sessionDocRef, 'offerCandidates');
+    const answerCandidatesRef = collection(sessionDocRef, 'answerCandidates');
+
+    const clearSubcollection = async (ref: typeof offerCandidatesRef) => {
+      const snap = await getDocs(ref);
+      await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+    };
+
+    const flushPendingCandidates = async () => {
+      while (pendingRemoteCandidates.length > 0 && pc) {
+        const candidate = pendingRemoteCandidates.shift();
+        if (candidate) {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+        }
       }
     };
-  }, [videoMode, initBuiltinCamera, onParticipantJoined]);
+
+    const addRemoteCandidate = (candidate: RTCIceCandidateInit) => {
+      if (pc && pc.remoteDescription) {
+        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+      } else {
+        pendingRemoteCandidates.push(candidate);
+      }
+    };
+
+    async function start() {
+      setBuiltinCallState('CONNECTING');
+
+      await initBuiltinCamera();
+      if (cancelled) return;
+
+      pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+        ]
+      });
+      peerConnectionRef.current = pc;
+
+      localStreamRef.current?.getTracks().forEach((track) => {
+        pc!.addTrack(track, localStreamRef.current!);
+      });
+
+      const remoteStream = new MediaStream();
+      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
+      pc.ontrack = (event) => {
+        event.streams[0]?.getTracks().forEach((track) => remoteStream.addTrack(track));
+        setBuiltinCallState('CONNECTED');
+        onParticipantJoined?.(2);
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        if (!pc) return;
+        if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'closed') {
+          setBuiltinCallState((prev) => (prev === 'CONNECTED' ? prev : 'FAILED'));
+          onParticipantLeft?.(1);
+        }
+      };
+
+      if (isCallInitiator) {
+        // Fresh call attempt — clear out any stale signaling from a
+        // previous attempt against this same session id first.
+        await Promise.all([clearSubcollection(offerCandidatesRef), clearSubcollection(answerCandidatesRef)]);
+        if (cancelled || !pc) return;
+
+        pc.onicecandidate = (event) => {
+          if (event.candidate) addDoc(offerCandidatesRef, event.candidate.toJSON());
+        };
+
+        const offerDescription = await pc.createOffer();
+        await pc.setLocalDescription(offerDescription);
+        await setDoc(sessionDocRef, {
+          offer: { sdp: offerDescription.sdp, type: offerDescription.type },
+          createdAt: new Date().toISOString()
+        });
+
+        unsubDoc = onFirestoreSnapshot(sessionDocRef, async (snap) => {
+          const data = snap.data();
+          if (!pc || cancelled) return;
+          if (data?.answer && !pc.currentRemoteDescription) {
+            await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+            await flushPendingCandidates();
+          }
+        });
+
+        unsubAnswerCandidates = onFirestoreSnapshot(answerCandidatesRef, (snap) => {
+          snap.docChanges().forEach((change) => {
+            if (change.type === 'added') addRemoteCandidate(change.doc.data() as RTCIceCandidateInit);
+          });
+        });
+      } else {
+        pc.onicecandidate = (event) => {
+          if (event.candidate) addDoc(answerCandidatesRef, event.candidate.toJSON());
+        };
+
+        unsubDoc = onFirestoreSnapshot(sessionDocRef, async (snap) => {
+          const data = snap.data();
+          if (!pc || cancelled) return;
+          if (data?.offer && !pc.currentRemoteDescription) {
+            await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+            await flushPendingCandidates();
+            const answerDescription = await pc.createAnswer();
+            await pc.setLocalDescription(answerDescription);
+            await updateDoc(sessionDocRef, {
+              answer: { sdp: answerDescription.sdp, type: answerDescription.type }
+            });
+          }
+        });
+
+        unsubOfferCandidates = onFirestoreSnapshot(offerCandidatesRef, (snap) => {
+          snap.docChanges().forEach((change) => {
+            if (change.type === 'added') addRemoteCandidate(change.doc.data() as RTCIceCandidateInit);
+          });
+        });
+      }
+    }
+
+    start().catch((err) => {
+      console.warn('Built-in chamber connection notice:', err?.message);
+      if (!cancelled) setBuiltinCallState('FAILED');
+    });
+
+    return () => {
+      cancelled = true;
+      if (unsubDoc) unsubDoc();
+      if (unsubOfferCandidates) unsubOfferCandidates();
+      if (unsubAnswerCandidates) unsubAnswerCandidates();
+      if (pc) {
+        pc.close();
+      }
+      peerConnectionRef.current = null;
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track) => track.stop());
+        localStreamRef.current = null;
+      }
+      setBuiltinCallState('WAITING');
+    };
+  }, [videoMode, sessionId, isCallInitiator, initBuiltinCamera, onParticipantJoined, onParticipantLeft]);
 
   // Toggle Camera Track
   const toggleCamera = () => {
@@ -194,6 +334,17 @@ export const DailyVideoCallFrame: React.FC<DailyVideoCallFrameProps> = ({
         const roomInfo = await DailyService.getOrCreateRoom(sessionId);
         finalUrl = roomInfo.url;
         setRoomUrl(roomInfo.url);
+
+        // No Daily.co account is configured server-side yet (isProvisioned
+        // is false), so this URL was never actually created on Daily's
+        // servers and joining it will always fail. Skip straight to the
+        // built-in chamber — which genuinely works — instead of showing an
+        // alarming cloud-connection error on every single room visit.
+        if (!roomInfo.isProvisioned) {
+          isInitializingRef.current = false;
+          setVideoMode('BUILTIN_COURT');
+          return;
+        }
       }
 
       if (!containerRef.current) {
@@ -324,9 +475,15 @@ export const DailyVideoCallFrame: React.FC<DailyVideoCallFrameProps> = ({
         {/* Left: Mode Badge & Feed Status */}
         <div className="flex items-center gap-2">
           {videoMode === 'BUILTIN_COURT' ? (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-700/60 text-[11px] font-mono-code font-bold text-emerald-300">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>COURTROOM LIVE FEED</span>
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-mono-code font-bold ${
+              builtinCallState === 'CONNECTED' ? 'bg-emerald-950/80 border-emerald-700/60 text-emerald-300' :
+              builtinCallState === 'FAILED' ? 'bg-rose-950/80 border-rose-700/60 text-rose-300' :
+              'bg-amber-950/80 border-amber-700/60 text-amber-300'
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${builtinCallState === 'CONNECTED' ? 'bg-emerald-400 animate-pulse' : builtinCallState === 'FAILED' ? 'bg-rose-400' : 'bg-amber-400 animate-ping'}`} />
+              <span>
+                {builtinCallState === 'CONNECTED' ? 'COURTROOM LIVE FEED' : builtinCallState === 'FAILED' ? 'CONNECTION FAILED' : 'CONNECTING…'}
+              </span>
             </div>
           ) : (
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-[11px] font-mono-code font-bold">
@@ -459,43 +616,52 @@ export const DailyVideoCallFrame: React.FC<DailyVideoCallFrameProps> = ({
                   )}
                 </div>
               </div>
-
-              {/* Audio visualizer bar */}
-              {isMicActive && (
-                <div className="absolute top-2.5 right-2.5 flex items-end gap-0.5 h-3 bg-slate-950/70 px-1.5 py-1 rounded-md border border-slate-700">
-                  <div className="w-1 bg-emerald-400 rounded-full transition-all duration-150" style={{ height: `${Math.min(100, audioLevel)}%` }} />
-                  <div className="w-1 bg-emerald-400 rounded-full transition-all duration-150" style={{ height: `${Math.min(100, audioLevel * 0.7)}%` }} />
-                  <div className="w-1 bg-emerald-400 rounded-full transition-all duration-150" style={{ height: `${Math.min(100, audioLevel * 0.4)}%` }} />
-                </div>
-              )}
             </div>
 
-            {/* Tile 2: Counterpart Judicial/Deponent Feed */}
+            {/* Tile 2: Counterpart Judicial/Deponent Feed — a REAL WebRTC
+                remote stream once connected, not a decorative placeholder. */}
             <div className="relative rounded-2xl bg-slate-900 border border-slate-800 overflow-hidden aspect-4/3 flex items-center justify-center shadow-lg group">
-              <div className="w-full h-full bg-linear-to-b from-slate-900 via-slate-950 to-slate-900 flex flex-col items-center justify-center p-4 text-center">
-                <div className="relative mb-3">
-                  <div className="w-16 h-16 rounded-2xl bg-indigo-900/60 border border-indigo-500/40 text-indigo-200 flex items-center justify-center font-bold text-xl shadow-md">
-                    {userRole.toLowerCase().includes('commissioner') ? 'DP' : 'CM'}
+              {builtinCallState === 'CONNECTED' ? (
+                <video
+                  ref={remoteVideoRef}
+                  autoPlay
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-linear-to-b from-slate-900 via-slate-950 to-slate-900 flex flex-col items-center justify-center p-4 text-center">
+                  <div className="relative mb-3">
+                    <div className="w-16 h-16 rounded-2xl bg-indigo-900/60 border border-indigo-500/40 text-indigo-200 flex items-center justify-center font-bold text-xl shadow-md">
+                      {userRole.toLowerCase().includes('commissioner') ? 'DP' : 'CM'}
+                    </div>
+                    {builtinCallState === 'FAILED' ? (
+                      <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-rose-500 border-2 border-slate-950 flex items-center justify-center">
+                        <AlertCircle className="w-3 h-3 text-white" />
+                      </div>
+                    ) : (
+                      <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-amber-500 border-2 border-slate-950 flex items-center justify-center animate-pulse">
+                        <RefreshCw className="w-3 h-3 text-white" />
+                      </div>
+                    )}
                   </div>
-                  <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 border-2 border-slate-950 flex items-center justify-center">
-                    <UserCheck className="w-3 h-3 text-white" />
-                  </div>
-                </div>
 
-                <div className="space-y-0.5">
-                  <h4 className="text-white font-bold text-xs">
-                    {userRole.toLowerCase().includes('commissioner') ? 'Deponent (Applicant)' : 'Commissioner for Oaths'}
-                  </h4>
-                  <p className="text-[10px] text-emerald-400 font-mono-code">
-                    ● Video Stream Connected & Synced
-                  </p>
+                  <div className="space-y-0.5">
+                    <h4 className="text-white font-bold text-xs">
+                      {userRole.toLowerCase().includes('commissioner') ? 'Deponent (Applicant)' : 'Commissioner for Oaths'}
+                    </h4>
+                    <p className={`text-[10px] font-mono-code ${builtinCallState === 'FAILED' ? 'text-rose-400' : 'text-amber-400'}`}>
+                      {builtinCallState === 'FAILED'
+                        ? '● Connection failed — check both sides are online'
+                        : '● Waiting for the other party to connect…'}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Counterpart Label */}
               <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between text-xs">
                 <div className="bg-slate-950/85 backdrop-blur-md px-2.5 py-1 rounded-lg border border-slate-700 text-white font-bold text-[11px] flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <span className={`w-2 h-2 rounded-full ${builtinCallState === 'CONNECTED' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
                   <span>
                     {userRole.toLowerCase().includes('commissioner') ? 'Deponent Stream' : 'Advocate / Commissioner'}
                   </span>
@@ -538,8 +704,8 @@ export const DailyVideoCallFrame: React.FC<DailyVideoCallFrameProps> = ({
             <div className="h-6 w-px bg-slate-700 mx-1" />
 
             <div className="px-3 py-1.5 text-[10px] font-mono-code text-slate-400 flex items-center gap-1.5">
-              <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden sm:inline">Court WebRTC 1080p • 0% Packet Loss</span>
+              <Wifi className={`w-3.5 h-3.5 ${builtinCallState === 'CONNECTED' ? 'text-emerald-400' : 'text-slate-500'}`} />
+              <span className="hidden sm:inline">Direct peer-to-peer WebRTC</span>
             </div>
           </div>
 

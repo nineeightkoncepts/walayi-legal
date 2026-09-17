@@ -136,6 +136,21 @@ service cloud.firestore {
       allow write: if isOwner(commissionerId) || isAdmin();
     }
 
+    // WebRTC Signaling — the built-in (non-Daily.co) video chamber's peer
+    // connection setup. Exchanged data is only session-description/ICE
+    // candidate info scoped to one commissioning session, not sensitive
+    // profile data, so this mirrors commissioningRequests' open posture
+    // (any signed-in user; the session id itself is the effective secret).
+    match /webrtcSessions/{sessionId} {
+      allow read, write: if isSignedIn();
+      match /offerCandidates/{candidateId} {
+        allow read, write: if isSignedIn();
+      }
+      match /answerCandidates/{candidateId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
     // Pending Account Invites — an admin-added user who hasn't clicked their
     // emailed activation link yet, so no Firebase Auth user (or users/{uid}
     // doc) exists for them yet. Only an admin may create/update these; the
