@@ -1131,10 +1131,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  // This is THE persistence path for a signed-in user's own profile —
+  // avatar, seal design, signature, subscription plan, and critically the
+  // Authority Onboarding flow (role/professionalCategory/authorities, the
+  // step that turns a plain deponent into a commissioner/notary/judicial
+  // officer/justice of the peace). It previously only ever updated local
+  // React state, so none of that survived a refresh or reached another
+  // device — in particular, an onboarded professional's role and
+  // authorities never reached Firestore, so even after a Master Admin
+  // "admitted" them, the live commissioner directory query (which reads
+  // role/professionalCategory straight from Firestore) had nothing
+  // commissioner-like to find, and they silently never appeared on the
+  // marketplace.
   const updateCurrentUser = (updates: Partial<UserProfile>) => {
     setCurrentUser(prev => {
       const updated = { ...prev, ...updates };
       setUsers(all => all.map(u => u.id === prev.id ? updated : u));
+
+      if (prev.id && prev.id !== 'guest-deponent') {
+        setDoc(doc(db, 'users', prev.id), {
+          ...updates,
+          updatedAt: new Date().toISOString()
+        }, { merge: true }).catch((err) => {
+          console.error('Firestore profile update failed:', err);
+          addNotification(
+            'Profile Sync Failed',
+            `Some profile changes could not be saved to your account. Reason: ${err?.message || 'unknown error'}. Try again, or refresh — otherwise this change will be lost.`,
+            'SYSTEM'
+          );
+        });
+      }
+
       return updated;
     });
   };

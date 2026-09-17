@@ -42,12 +42,14 @@ service cloud.firestore {
       // admin-tier role — that must be granted by an existing admin.
       allow create: if isAdmin() || (isOwner(userId) && !isPrivilegedRole(request.resource.data.role));
       // A user may edit their own profile (name, phone, signature, fee,
-      // availability, etc.) but may never change their OWN role — that is
-      // an admin-only action, enforced here by requiring it stay identical
-      // unless the writer is already an admin.
+      // availability, etc.) and may self-declare a professional role
+      // (commissioner/notary/judicial_officer/justice_of_peace/deponent) —
+      // exactly the same self-service trust level already granted at
+      // create/signup above (see Authority Onboarding) — but may never
+      // grant themselves an admin-tier role; only an existing admin can.
       allow update: if isAdmin() || (
         isOwner(userId) &&
-        request.resource.data.role == resource.data.role
+        !isPrivilegedRole(request.resource.data.role)
       );
       allow delete: if isAdmin();
     }
