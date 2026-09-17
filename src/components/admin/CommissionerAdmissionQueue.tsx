@@ -6,7 +6,8 @@ import { UserAvatar } from '../common/UserAvatar';
 import {
   Check,
   X,
-  Ban
+  Ban,
+  CheckCheck
 } from 'lucide-react';
 
 type AdmissionTab = 'PENDING' | 'ADMITTED' | 'REJECTED' | 'SUSPENDED';
@@ -17,6 +18,7 @@ export const CommissionerAdmissionQueue: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<AdmissionTab>('PENDING');
   const [rejectTarget, setRejectTarget] = useState<UserProfile | null>(null);
   const [suspendTarget, setSuspendTarget] = useState<UserProfile | null>(null);
+  const [showBulkAdmitConfirm, setShowBulkAdmitConfirm] = useState(false);
 
   // Any account without an explicit admissionStatus (created before this
   // field existed, or seeded data) is treated as PENDING — fails closed
@@ -52,6 +54,18 @@ export const CommissionerAdmissionQueue: React.FC = () => {
     }
   };
 
+  // Admits every account currently sitting in Pending Review in one action —
+  // for when a batch of professionals (e.g. from a prior onboarding push)
+  // all need marketplace access at once rather than clicking Admit one by
+  // one. Deliberately scoped to PENDING only: reinstating a REJECTED or
+  // SUSPENDED account stays a one-by-one, deliberate decision.
+  const handleConfirmBulkAdmit = (reason: string) => {
+    const justification = reason.trim() || 'Bulk admitted by Master Admin.';
+    pending.forEach((u) => {
+      setCommissionerAdmission(u.id, 'ADMITTED', justification);
+    });
+  };
+
   const tabButtonClass = (tab: AdmissionTab, activeColor: string) =>
     `px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
       activeSubTab === tab
@@ -79,6 +93,16 @@ export const CommissionerAdmissionQueue: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {pending.length > 0 && (
+            <button
+              onClick={() => setShowBulkAdmitConfirm(true)}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+              id="btn-bulk-admit-all-pending"
+            >
+              <CheckCheck className="w-3.5 h-3.5" />
+              Admit All Pending ({pending.length})
+            </button>
+          )}
           <span className={`px-3 py-1.5 rounded-xl font-mono-code font-bold text-xs ${
             pending.length > 0
               ? 'bg-amber-100 text-amber-900 border border-amber-300'
@@ -223,6 +247,17 @@ export const CommissionerAdmissionQueue: React.FC = () => {
           { label: 'Commissioner', value: suspendTarget.fullName },
           { label: 'Email', value: suspendTarget.email }
         ] : []}
+      />
+
+      <SecurityConfirmationModal
+        isOpen={showBulkAdmitConfirm}
+        onClose={() => setShowBulkAdmitConfirm(false)}
+        onConfirm={handleConfirmBulkAdmit}
+        title="Admit All Pending Commissioners"
+        description={`This grants marketplace participation to all ${pending.length} account(s) currently awaiting review, in one action. Each will be notified and become visible on the public marketplace immediately.`}
+        actionButtonText={`Admit All ${pending.length}`}
+        requireReason={false}
+        targetDetails={pending.map((u) => ({ label: u.fullName, value: u.email }))}
       />
 
     </div>
