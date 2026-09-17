@@ -27,10 +27,10 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({ isOpen, onClos
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn"
+      className="fixed inset-0 z-50 flex p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn overflow-y-auto"
       id="pwa-install-modal-root"
     >
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden flex flex-col max-h-[90vh] m-auto">
         {/* Header */}
         <div className="bg-[#0D1B3D] text-white p-6 relative">
           <button

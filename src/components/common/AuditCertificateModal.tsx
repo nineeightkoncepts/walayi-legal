@@ -84,8 +84,8 @@ export const AuditCertificateModal: React.FC<AuditCertificateModalProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto" id="audit-certificate-modal">
-      <div className="relative w-full max-w-4xl bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden my-6 text-slate-900">
+    <div className="fixed inset-0 z-50 flex p-2 sm:p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto" id="audit-certificate-modal">
+      <div className="relative w-full max-w-4xl bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden m-auto text-slate-900">
         
         {/* Header Bar */}
         <div className="flex flex-wrap items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50 print:hidden gap-3">

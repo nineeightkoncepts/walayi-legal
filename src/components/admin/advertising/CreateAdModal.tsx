@@ -170,8 +170,8 @@ export const CreateAdModal: React.FC<CreateAdModalProps> = ({
   const verifiedPros = users.filter(u => u.authorities && u.authorities.some(a => a.status === 'VERIFIED'));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto animate-fadeIn" id="create-ad-modal-backdrop">
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto my-8">
+    <div className="fixed inset-0 z-50 flex p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto animate-fadeIn" id="create-ad-modal-backdrop">
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto m-auto">
         
         {/* Header */}
         <div className="p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-xs z-10">

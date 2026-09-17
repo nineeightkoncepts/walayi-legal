@@ -27,9 +27,9 @@ export const AboutLegalInfrastructureModal: React.FC<AboutLegalInfrastructureMod
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-950/70 backdrop-blur-xs animate-fadeIn" id="about-legal-modal-root">
-      <div 
-        className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-scaleUp"
+    <div className="fixed inset-0 z-50 flex p-4 sm:p-6 bg-slate-950/70 backdrop-blur-xs animate-fadeIn overflow-y-auto" id="about-legal-modal-root">
+      <div
+        className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-scaleUp m-auto"
         onClick={(e) => e.stopPropagation()}
       >
         

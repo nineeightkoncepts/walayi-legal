@@ -410,9 +410,9 @@ export const ProfileAccountModal: React.FC<ProfileAccountModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/75 backdrop-blur-xs animate-fadeIn" id="user-profile-modal-root">
-      <div 
-        className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden animate-scaleUp"
+    <div className="fixed inset-0 z-50 flex p-3 sm:p-5 bg-slate-950/75 backdrop-blur-xs animate-fadeIn overflow-y-auto" id="user-profile-modal-root">
+      <div
+        className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden animate-scaleUp m-auto"
         onClick={(e) => e.stopPropagation()}
       >
         

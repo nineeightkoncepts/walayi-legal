@@ -508,8 +508,8 @@ export const CommissionerSettings: React.FC = () => {
 
         {/* Confirmation required before a payout destination change takes effect */}
         {showPayoutConfirm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-            <div className="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 space-y-4">
+          <div className="fixed inset-0 z-50 flex p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
+            <div className="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 space-y-4 m-auto">
               <div className="flex items-start gap-3">
                 <div className="p-2 rounded-lg bg-amber-100 shrink-0">
                   <ShieldAlert className="w-5 h-5 text-amber-700" />

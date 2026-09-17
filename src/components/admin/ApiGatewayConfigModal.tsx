@@ -91,8 +91,8 @@ export const ApiGatewayConfigModal: React.FC<ApiGatewayConfigModalProps> = ({ is
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn" id="api-gateway-config-modal-overlay">
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-scaleUp">
+    <div className="fixed inset-0 z-50 flex p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn overflow-y-auto" id="api-gateway-config-modal-overlay">
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-scaleUp m-auto">
         
         {/* Modal Header */}
         <div className="p-6 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">

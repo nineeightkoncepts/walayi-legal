@@ -459,8 +459,8 @@ export const UserManagementSection: React.FC = () => {
       {/* MODAL 1: ADD NEW USER                                                 */}
       {/* ===================================================================== */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex p-4 animate-fadeIn overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-6 max-h-[90vh] overflow-y-auto m-auto">
             
             {/* Modal Header */}
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
@@ -644,8 +644,8 @@ export const UserManagementSection: React.FC = () => {
       {/* MODAL 2: ASSIGN ROLE TO EXISTING USER                                  */}
       {/* ===================================================================== */}
       {roleChangeModalUser && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-6">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex p-4 animate-fadeIn overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-6 m-auto">
             
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
               <div className="space-y-1">

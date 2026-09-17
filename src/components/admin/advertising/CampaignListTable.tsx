@@ -378,8 +378,8 @@ export const CampaignListTable: React.FC<CampaignListTableProps> = ({
 
       {/* Confirmation & Prompt Modal for Actions */}
       {actionTargetAd && actionType && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 max-w-md w-full shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 max-w-md w-full shadow-2xl space-y-4 m-auto">
             
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />

@@ -245,8 +245,8 @@ export const HomeView: React.FC = () => {
 
       {/* Tutorial & Tips Modal (Lightbulb Click) */}
       {showTipsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn" id="tutorial-tips-modal">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn overflow-y-auto" id="tutorial-tips-modal">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh] m-auto">
             
             {/* Modal Header */}
             <div className="bg-slate-900 text-white p-5 flex items-center justify-between">

@@ -219,8 +219,8 @@ export const CredentialVerificationQueue: React.FC = () => {
 
       {/* Document Inspector & Statutory Checklist Modal */}
       {selectedDoc && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-2xl w-full overflow-hidden text-xs max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-2xl w-full overflow-hidden text-xs max-h-[90vh] flex flex-col m-auto">
             
             <div className="p-6 bg-slate-50 border-b border-slate-100 flex items-start justify-between shrink-0">
               <div>

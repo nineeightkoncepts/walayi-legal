@@ -305,8 +305,8 @@ export const MarketplaceView: React.FC = () => {
 
       {/* Conflict Explanation Modal */}
       {conflictModalData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs" id="marketplace-conflict-modal">
-          <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 sm:p-8 space-y-5 text-slate-900 animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto" id="marketplace-conflict-modal">
+          <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 sm:p-8 space-y-5 text-slate-900 animate-fadeIn m-auto">
             
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">

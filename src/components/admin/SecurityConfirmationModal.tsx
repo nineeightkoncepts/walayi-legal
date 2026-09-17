@@ -45,8 +45,8 @@ export const SecurityConfirmationModal: React.FC<SecurityConfirmationModalProps>
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden">
+    <div className="fixed inset-0 z-50 flex p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn overflow-y-auto">
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden m-auto">
         
         {/* Modal Header */}
         <div className={`p-6 border-b flex items-start justify-between gap-3 ${

@@ -50,8 +50,8 @@ export const ProfessionalProfileModal: React.FC<ProfessionalProfileModalProps> =
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto" id="professional-profile-modal">
-      <div className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden my-8 text-slate-900">
+    <div className="fixed inset-0 z-50 flex p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto" id="professional-profile-modal">
+      <div className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden m-auto text-slate-900">
         
         {/* Modal Top Header */}
         <div className="relative p-6 bg-slate-50 border-b border-slate-200">

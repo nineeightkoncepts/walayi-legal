@@ -154,8 +154,8 @@ export const StatutoryLegalRulesSection: React.FC = () => {
 
       {/* Edit Rule Modal */}
       {editingRule && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden text-xs">
+        <div className="fixed inset-0 z-50 flex p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden text-xs m-auto">
             <div className="p-6 bg-slate-50 border-b border-slate-100 flex items-start justify-between">
               <div>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono-code font-bold bg-blue-100 text-blue-800">
