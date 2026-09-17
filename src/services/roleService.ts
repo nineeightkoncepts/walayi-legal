@@ -13,6 +13,7 @@ import { UserRole } from '../types';
 export const SUPER_ADMIN_EMAILS = [
   'admin@wallahi.ug',
   'ambrosenen@gmail.com',
+  'nineeightkoncepts@gmail.com',
 ];
 
 /**
