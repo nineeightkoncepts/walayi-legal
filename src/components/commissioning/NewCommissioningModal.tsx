@@ -122,16 +122,28 @@ export const NewCommissioningModal: React.FC = () => {
   const [isJudicialMatterHandling, setIsJudicialMatterHandling] = useState<boolean>(false);
 
   // Commissioner Selection State (Part 5 & 6)
-  const verifiedPros = users.filter(u => 
-    u.role === 'commissioner' || 
-    u.role === 'notary' || 
-    u.role === 'judicial_officer' || 
+  // Only ADMITTED professionals are selectable — the Firestore create rule
+  // for commissioningRequests rejects any request whose assignedProfessionalId
+  // isn't admitted, so listing a non-admitted pro here would let a deponent
+  // pick, pay, and never actually reach that pro (the write silently fails).
+  const allPros = users.filter(u =>
+    u.role === 'commissioner' ||
+    u.role === 'notary' ||
+    u.role === 'judicial_officer' ||
     u.role === 'justice_of_peace' ||
     (u.authorities && u.authorities.length > 0)
   );
+  const verifiedPros = allPros.filter(u => u.admissionStatus === 'ADMITTED');
+  const hasPendingPros = allPros.length > verifiedPros.length;
 
   const [selectedProId, setSelectedProId] = useState<string>(() => {
-    if (preselectedCommissionerId) return preselectedCommissionerId;
+    // Only honor the preselection if that professional is actually admitted
+    // and therefore selectable — otherwise fall through to the default pick
+    // below instead of silently targeting a commissioner the deponent never
+    // chose.
+    if (preselectedCommissionerId && verifiedPros.some(p => p.id === preselectedCommissionerId)) {
+      return preselectedCommissionerId;
+    }
     const defaultNonConflicted = verifiedPros.find(p => p.id !== currentUser.id);
     return defaultNonConflicted ? defaultNonConflicted.id : (verifiedPros[0]?.id || '');
   });
@@ -1218,9 +1230,13 @@ export const NewCommissioningModal: React.FC = () => {
             {verifiedPros.length === 0 && (
               <div className="p-6 rounded-2xl bg-amber-50/70 border border-amber-200 text-center space-y-1" id="no-commissioners-available">
                 <AlertTriangle className="w-6 h-6 text-amber-600 mx-auto" />
-                <p className="text-xs font-bold text-amber-900">No commissioners are registered yet</p>
+                <p className="text-xs font-bold text-amber-900">
+                  {hasPendingPros ? 'No admitted commissioners yet' : 'No commissioners are registered yet'}
+                </p>
                 <p className="text-[11px] text-amber-700">
-                  Check back once a commissioner for oaths has signed up on WALAYI.
+                  {hasPendingPros
+                    ? 'One or more professionals have signed up but are still awaiting Master Admin admission. Ask an admin to admit them from the Commissioner Admissions queue.'
+                    : 'Check back once a commissioner for oaths has signed up on WALAYI.'}
                 </p>
               </div>
             )}

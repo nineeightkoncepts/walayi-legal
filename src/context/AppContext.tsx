@@ -1428,10 +1428,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRequests(prev => [newReq, ...prev]);
     setActiveCommissioningId(newReq.id);
 
-    // Mirror to Firestore for cross-device real-time sync
+    // Mirror to Firestore for cross-device real-time sync. This is the ONLY
+    // way the assigned commissioner (on a different device/session) ever
+    // learns this request exists, so a failure here must never be silent —
+    // otherwise the deponent believes the request/call went through when
+    // the other party can never actually see it.
     try {
       setDoc(doc(db, 'commissioningRequests', newReq.id), newReq, { merge: true }).catch(err => {
-        console.warn('Firestore request creation notice:', err?.message);
+        console.error('Firestore request creation failed — the commissioner will NOT see this request:', err);
+        addNotification(
+          'Sync Failed — Commissioner May Not See This Request',
+          `This request was saved on your device only. Reason: ${err?.message || 'unknown error'}. If ${newReq.assignedProfessionalName || 'the commissioner'} was just admitted, try again in a moment.`,
+          'SYSTEM'
+        );
       });
     } catch (e) {
       // Ignored non-blocking
@@ -1508,11 +1517,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return req;
     }));
 
-    // Mirror to Firestore for live ceremony sync
+    // Mirror to Firestore for live ceremony sync — this is how call signals
+    // (liveCallState, presence flags, ceremony steps) actually reach the
+    // other party's device. A silent failure here would make a call button
+    // appear to do nothing on the receiving end with no way to diagnose why.
     if (updatedReq) {
       try {
         setDoc(doc(db, 'commissioningRequests', id), updatedReq, { merge: true }).catch(err => {
-          console.warn('Firestore request update sync notice:', err?.message);
+          console.error('Firestore request update sync failed:', err);
+          addNotification(
+            'Sync Failed',
+            `A change on this request could not be sent to the other party. Reason: ${err?.message || 'unknown error'}.`,
+            'SYSTEM'
+          );
         });
       } catch (e) {
         // Ignored non-blocking

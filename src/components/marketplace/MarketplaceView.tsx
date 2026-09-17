@@ -48,13 +48,18 @@ export const MarketplaceView: React.FC = () => {
     advice?: string;
   } | null>(null);
 
-  // Professionals are users who are not pure deponents/clients or pure super admins
-  const professionals = users.filter(u => 
-    u.role === 'commissioner' || 
-    u.role === 'notary' || 
-    u.role === 'judicial_officer' || 
+  // Professionals are users who are not pure deponents/clients or pure super
+  // admins, and who have actually been ADMITTED by a Master Admin — listing
+  // a PENDING professional here would let a deponent book them, pay, and
+  // never actually reach them (the commissioningRequests Firestore rule
+  // rejects a request against a non-admitted commissioner, silently).
+  const professionals = users.filter(u =>
+    (u.role === 'commissioner' ||
+    u.role === 'notary' ||
+    u.role === 'judicial_officer' ||
     u.role === 'justice_of_peace' ||
-    (u.authorities && u.authorities.length > 0)
+    (u.authorities && u.authorities.length > 0)) &&
+    u.admissionStatus === 'ADMITTED'
   );
 
   const filtered = professionals.filter(pro => {
