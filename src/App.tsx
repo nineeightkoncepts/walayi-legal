@@ -4,6 +4,8 @@ import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
 import { SplashScreen } from './components/auth/SplashScreen';
 import { AuthPage } from './components/auth/AuthPage';
+import { CompleteInviteView } from './components/auth/CompleteInviteView';
+import { auth, isSignInWithEmailLink } from './services/firebase';
 
 // Views
 import { HomeView } from './components/home/HomeView';
@@ -144,6 +146,19 @@ function MainAppShell() {
   const { currentView, setCurrentView, isSignedIn, isAuthReady } = useApp();
   const [showSplash, setShowSplash] = useState(false);
 
+  // An admin-issued "set up your account" invite link (see
+  // UserManagementSection → addUser / CompleteInviteView) lands back here as
+  // a Firebase passwordless-sign-in link. Computed once at mount — once the
+  // invitee completes it, isSignedIn flips true and this branch is skipped
+  // on the next render regardless of this flag's staleness.
+  const [isEmailLinkInvite] = useState(() => {
+    try {
+      return isSignInWithEmailLink(auth, window.location.href);
+    } catch {
+      return false;
+    }
+  });
+
   // Detect direct public verification links, or the auth page routes
   // (#/signin, #/signup, #/forgot-password), on initial landing or hashchange
   React.useEffect(() => {
@@ -184,6 +199,17 @@ function MainAppShell() {
   // returning, already-signed-in user never sees the sign-in page flash by.
   if (!isAuthReady) {
     return <AuthCheckingScreen />;
+  }
+
+  // Someone clicked their account activation email — hand off to the
+  // dedicated completion flow instead of the ordinary sign-in screen.
+  if (isEmailLinkInvite && !isSignedIn) {
+    return (
+      <>
+        <CompleteInviteView />
+        <NotificationToasts />
+      </>
+    );
   }
 
   // The public certificate verification portal is the one feature reachable

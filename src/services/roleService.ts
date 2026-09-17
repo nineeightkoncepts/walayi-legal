@@ -22,6 +22,15 @@ export const SUPER_ADMIN_EMAILS = [
 export const isSuperAdminEmail = (email?: string | null): boolean =>
   !!email && SUPER_ADMIN_EMAILS.includes(email.trim().toLowerCase());
 
+/**
+ * A Firestore-doc-id-safe form of an email address, used as the id for a
+ * pendingInvites/{id} document so the invited user's own signed-in session
+ * can look their invite up directly (by recomputing this id) instead of
+ * needing a query.
+ */
+export const sanitizeEmailForId = (email: string): string =>
+  email.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+
 export type FeatureAccess = {
   canAccess: boolean;
   reason?: string;

@@ -188,6 +188,26 @@ export interface UserProfile {
   isPrisonOfficerJP?: boolean;
 }
 
+// An admin-initiated account that doesn't exist in Firebase Auth yet — the
+// invitee has been emailed a passwordless sign-in link and hasn't clicked
+// it. Once they do, CompleteInviteView applies these fields to their new
+// real users/{uid} doc and this record is deleted. Doc id is the invited
+// email address, sanitized (see sanitizeEmailForId).
+export interface PendingInvite {
+  id: string;
+  email: string;
+  fullName: string;
+  role: UserRole;
+  phone?: string;
+  stationCity?: string;
+  nationalIdNumber?: string;
+  lawFirmName?: string;
+  firmName?: string | null;
+  enrollmentNumber?: string;
+  invitedAt: string;
+  invitedByEmail?: string;
+}
+
 // A signer-chosen spot on the real uploaded document — captured by clicking
 // the rendered PDF in PdfSignaturePlacer — for where a signature or the
 // commissioner's digital stamp should be overlaid.

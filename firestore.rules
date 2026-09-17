@@ -135,5 +135,17 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isOwner(commissionerId) || isAdmin();
     }
+
+    // Pending Account Invites — an admin-added user who hasn't clicked their
+    // emailed activation link yet, so no Firebase Auth user (or users/{uid}
+    // doc) exists for them yet. Only an admin may create/update these; the
+    // invitee reads/deletes their own (by the signed-in email matching the
+    // invite, once they've completed the passwordless sign-in link) to pull
+    // their intended profile and clean up after applying it.
+    match /pendingInvites/{inviteId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.email == request.auth.token.email);
+    }
   }
 }

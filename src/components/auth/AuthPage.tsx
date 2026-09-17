@@ -22,8 +22,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   sendPasswordResetEmail,
-  browserLocalPersistence,
-  browserSessionPersistence
+  browserLocalPersistence
 } from '../../services/firebase';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { isSuperAdminEmail } from '../../services/roleService';
@@ -64,7 +63,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onVerifyInstead }) => {
   // Sign In fields
   const [signInEmail, setSignInEmail] = useState('');
   const [signInPassword, setSignInPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
 
   // Sign Up fields
   const [signUpFullName, setSignUpFullName] = useState('');
@@ -163,9 +161,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onVerifyInstead }) => {
     setIsLoading(true);
 
     try {
-      // Set persistence based on "Remember me" checkbox
-      const persistence = rememberMe ? browserLocalPersistence : browserSessionPersistence;
-      await setPersistence(auth, persistence);
+      // Always persist the session locally (survives closing the tab/app
+      // and, critically, mobile browsers reclaiming a backgrounded page) so
+      // users stay signed in for as long as Firebase's refresh token allows,
+      // rather than being dropped back to the sign-in screen minutes later.
+      await setPersistence(auth, browserLocalPersistence);
 
       // Authenticate with Firebase Auth
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -250,8 +250,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onVerifyInstead }) => {
     setIsLoading(true);
 
     try {
-      const persistence = rememberMe ? browserLocalPersistence : browserSessionPersistence;
-      await setPersistence(auth, persistence);
+      // Always persist locally — see the email/password handler above.
+      await setPersistence(auth, browserLocalPersistence);
 
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
@@ -578,19 +578,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onVerifyInstead }) => {
                       </div>
                     </div>
 
-                    {/* Remember me Checkbox (Session Persistence) */}
-                    <div className="flex items-center justify-between pt-1">
-                      <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={rememberMe}
-                          onChange={(e) => setRememberMe(e.target.checked)}
-                          className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                          id="checkbox-remember-me"
-                        />
-                        <span className="text-xs font-semibold text-slate-700">Remember me</span>
-                      </label>
-
+                    {/* Sessions are always kept signed in as long as possible
+                        (see handleSignIn/handleGoogleAuth), so there's no
+                        "remember me" choice to make here. */}
+                    <div className="flex items-center justify-end pt-1">
                       <button
                         type="button"
                         onClick={() => {

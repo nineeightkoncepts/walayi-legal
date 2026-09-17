@@ -18,9 +18,12 @@ import {
   MapPin, 
   Phone, 
   Mail, 
-  Key, 
+  Key,
   AlertTriangle,
-  ChevronDown
+  ChevronDown,
+  Clock,
+  Send,
+  XCircle
 } from 'lucide-react';
 
 const ROLE_OPTIONS: { role: UserRole; label: string; category: string; badgeColor: string }[] = [
@@ -39,6 +42,9 @@ export const UserManagementSection: React.FC = () => {
   const {
     users,
     allPlatformUsers,
+    pendingInvites,
+    resendInvite,
+    cancelInvite,
     currentUser,
     addUser,
     updateUserRole,
@@ -47,6 +53,9 @@ export const UserManagementSection: React.FC = () => {
     setOperatingView,
     setCurrentView
   } = useApp();
+
+  const [isInviting, setIsInviting] = useState(false);
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   // `users` only ever holds mock/seed accounts plus ADMITTED commissioners
   // (kept lean for bandwidth/privacy — every non-admin session loads it).
@@ -116,23 +125,29 @@ export const UserManagementSection: React.FC = () => {
     };
   }, [allUsers]);
 
-  const handleCreateUserSubmit = (e: React.FormEvent) => {
+  const handleCreateUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.fullName.trim() || !formData.email.trim()) {
       alert('Full Name and Email are mandatory statutory fields.');
       return;
     }
 
-    addUser({
+    setIsInviting(true);
+    const sent = await addUser({
       fullName: formData.fullName.trim(),
       email: formData.email.trim(),
       phone: formData.phone.trim(),
       role: formData.role,
       stationCity: formData.stationCity.trim() || 'Kampala',
-      nationalIdNumber: formData.nationalIdNumber.trim() || `CM${Math.floor(10000000 + Math.random() * 90000000)}88J`,
+      nationalIdNumber: formData.nationalIdNumber.trim() || undefined,
       lawFirmName: formData.lawFirmName.trim() || undefined,
       enrollmentNumber: formData.enrollmentNumber.trim() || undefined,
     });
+    setIsInviting(false);
+
+    // Whether it succeeded or failed is already surfaced as a notification
+    // by addUser — either way there's nothing more to do in this form.
+    if (!sent) return;
 
     // Reset and close
     setFormData({
@@ -146,6 +161,17 @@ export const UserManagementSection: React.FC = () => {
       enrollmentNumber: '',
     });
     setIsAddModalOpen(false);
+  };
+
+  const handleResendInvite = async (inviteId: string) => {
+    setResendingId(inviteId);
+    await resendInvite(inviteId);
+    setResendingId(null);
+  };
+
+  const handleCancelInvite = (inviteId: string, fullName: string) => {
+    if (!window.confirm(`Cancel the pending invitation for ${fullName}? They will no longer be able to use their activation link.`)) return;
+    cancelInvite(inviteId);
   };
 
   const handleRoleChangeConfirm = (newRole: UserRole) => {
@@ -309,6 +335,55 @@ export const UserManagementSection: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Pending Invites — admin-added accounts that have been emailed an
+          activation link but haven't clicked it yet. No real Firebase Auth
+          user exists for them until they do. */}
+      {pendingInvites.length > 0 && (
+        <div className="rounded-3xl bg-amber-50/60 border border-amber-200 shadow-sm overflow-hidden" id="pending-invites-section">
+          <div className="px-5 py-3 border-b border-amber-200 flex items-center gap-2">
+            <Clock className="w-4 h-4 text-amber-600" />
+            <h3 className="text-xs font-bold text-amber-900 uppercase tracking-wider">
+              Pending Invitations ({pendingInvites.length})
+            </h3>
+            <span className="text-[11px] text-amber-700">— awaiting account setup by the invitee</span>
+          </div>
+          <div className="divide-y divide-amber-200/70">
+            {pendingInvites.map((invite) => (
+              <div key={invite.id} className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-3 min-w-0">
+                  <UserAvatar name={invite.fullName} size="sm" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-800 truncate">{invite.fullName}</p>
+                    <p className="text-[11px] text-slate-500 truncate">{invite.email} · {invite.role.replace(/_/g, ' ')}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleResendInvite(invite.id)}
+                    disabled={resendingId === invite.id}
+                    className="px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60"
+                    id={`btn-resend-invite-${invite.id}`}
+                  >
+                    <Send className="w-3 h-3" />
+                    {resendingId === invite.id ? 'Sending…' : 'Resend'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCancelInvite(invite.id, invite.fullName)}
+                    className="px-3 py-1.5 rounded-lg bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    id={`btn-cancel-invite-${invite.id}`}
+                  >
+                    <XCircle className="w-3 h-3" />
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Users Data Table */}
       <div className="rounded-3xl bg-white border border-slate-200 shadow-sm overflow-hidden">
@@ -478,10 +553,10 @@ export const UserManagementSection: React.FC = () => {
                   SUPER ADMIN PROVISIONING
                 </div>
                 <h3 className="text-xl font-display-legal font-bold text-[#0D1B3D]">
-                  Add New Platform User
+                  Invite New Platform User
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Fill in the statutory particulars and assign their designated platform role.
+                  Fill in their statutory particulars and designated role. They'll be emailed a secure link to activate the account themselves — nothing is created until they do.
                 </p>
               </div>
               <button
@@ -636,11 +711,12 @@ export const UserManagementSection: React.FC = () => {
 
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all shadow-md shadow-blue-600/20 cursor-pointer flex items-center gap-2"
+                  disabled={isInviting}
+                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all shadow-md shadow-blue-600/20 cursor-pointer flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                   id="btn-submit-create-user"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Create User Account</span>
+                  <span>{isInviting ? 'Sending Invitation…' : 'Send Account Setup Invitation'}</span>
                 </button>
               </div>
             </form>

@@ -15,7 +15,8 @@ import {
   AuditEvent,
   DocumentDraft,
   AuthorityType,
-  AuthorityStatus
+  AuthorityStatus,
+  PendingInvite
 } from '../types';
 import { 
   INITIAL_USERS, 
@@ -36,10 +37,10 @@ import {
 } from '../services/hashService';
 import { checkCommissionerConflict } from '../utils/conflictValidation';
 import { PaymentAdapter } from '../services/paymentService';
-import { auth, fbSignOut, onAuthStateChanged, db } from '../services/firebase';
+import { auth, fbSignOut, onAuthStateChanged, db, sendSignInLinkToEmail } from '../services/firebase';
 import { doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, onSnapshot, collection, query as fsQuery, where, getDocs } from 'firebase/firestore';
 import { getStoredProfilePhoto } from '../services/profilePhotoService';
-import { isSuperAdminEmail, isCommissionerLike } from '../services/roleService';
+import { isSuperAdminEmail, isCommissionerLike, sanitizeEmailForId } from '../services/roleService';
 import { PRESENCE_HEARTBEAT_INTERVAL_MS } from '../services/presenceService';
 
 export type AppView = 
@@ -74,6 +75,12 @@ interface AppContextType {
   // admin console, since `users` above deliberately excludes plain
   // deponents and non-admitted professionals for bandwidth/privacy reasons.
   allPlatformUsers: UserProfile[];
+  // Admin-added accounts that have been emailed an activation link but
+  // haven't clicked it yet (no real Firebase Auth user exists for them until
+  // they do). Populated only for admins.
+  pendingInvites: PendingInvite[];
+  resendInvite: (inviteId: string) => Promise<void>;
+  cancelInvite: (inviteId: string) => void;
   requests: CommissioningRequest[];
   drafts: DocumentDraft[];
   activeDraftId: string | null;
@@ -101,7 +108,14 @@ interface AppContextType {
   isAuthReady: boolean;
   
   // Actions
-  addUser: (userData: Partial<UserProfile> & { fullName: string; email: string; role: UserRole }) => UserProfile;
+  // Invites a new user by email rather than fabricating an account directly:
+  // no real Firebase Auth user (or Firestore users/{uid} doc) can exist until
+  // they actually click the activation email and complete sign-up
+  // themselves, so this writes a pendingInvites record and emails them a
+  // passwordless activation link instead. Resolves true if the invite was
+  // sent, false if it failed (already surfaced to the admin as a
+  // notification either way).
+  addUser: (userData: Partial<UserProfile> & { fullName: string; email: string; role: UserRole }) => Promise<boolean>;
   updateUserRole: (userId: string, newRole: UserRole) => void;
   deleteUser: (userId: string) => void;
   setCurrentView: (view: AppView) => void;
@@ -188,6 +202,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ADMITTED commissioners for the public marketplace.
   const [commissionerAdmissions, setCommissionerAdmissions] = useState<UserProfile[]>([]);
   const [allPlatformUsers, setAllPlatformUsers] = useState<UserProfile[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   // Always start blank. If a previous Firebase session is still valid, the
   // onAuthStateChanged listener below fills in the real profile moments
   // after mount — the app never guesses or assumes an identity up front.
@@ -665,6 +680,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [isSignedIn, isMasterAdmin]);
 
   // ---------------------------------------------------------------------------
+  // Pending account invites (Master Admin only) — admin-added accounts that
+  // have been emailed an activation link but haven't clicked it yet.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!isSignedIn || !isMasterAdmin) {
+      setPendingInvites([]);
+      return;
+    }
+
+    let unsub: (() => void) | undefined;
+    try {
+      unsub = onSnapshot(collection(db, 'pendingInvites'), (snap) => {
+        const invites: PendingInvite[] = [];
+        snap.forEach((d) => {
+          const data: any = d.data() || {};
+          invites.push({
+            id: d.id,
+            email: data.email || '',
+            fullName: data.fullName || 'Invited User',
+            role: (data.role || 'deponent') as UserRole,
+            phone: data.phone || undefined,
+            stationCity: data.stationCity || undefined,
+            nationalIdNumber: data.nationalIdNumber || undefined,
+            lawFirmName: data.lawFirmName || undefined,
+            firmName: data.firmName || null,
+            enrollmentNumber: data.enrollmentNumber || undefined,
+            invitedAt: data.invitedAt || new Date().toISOString(),
+            invitedByEmail: data.invitedByEmail || undefined,
+          });
+        });
+        invites.sort((a, b) => new Date(b.invitedAt).getTime() - new Date(a.invitedAt).getTime());
+        setPendingInvites(invites);
+      }, (err) => console.warn('Pending invites listener notice:', err?.message));
+    } catch (e) {
+      console.warn('Could not attach pending invites listener', e);
+    }
+
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [isSignedIn, isMasterAdmin]);
+
+  // ---------------------------------------------------------------------------
   // Presence heartbeat.
   // Firestore has no server-side "disconnect" hook (unlike Realtime Database's
   // onDisconnect), so live "who's online" is approximated: while a signed-in
@@ -865,62 +923,106 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const addUser = (userData: Partial<UserProfile> & { fullName: string; email: string; role: UserRole }): UserProfile => {
-    const newId = `user-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  // The action code URL a recipient's activation link points back to.
+  // Embedding the email lets CompleteInviteView prefill it even when the
+  // link is opened on a different device than the one that sent it (the
+  // normal case for an admin inviting someone else).
+  const buildInviteActionCodeSettings = (email: string) => ({
+    url: `${window.location.origin}/?invite=1&email=${encodeURIComponent(email)}`,
+    handleCodeInApp: true,
+  });
+
+  // No real account can exist until the invitee actually completes sign-up
+  // themselves (see CompleteInviteView), so this never fabricates a
+  // Firestore users/{uid} doc or a Firebase Auth user directly — it records
+  // a pendingInvites entry and emails a passwordless activation link via
+  // Firebase Auth's own delivery (no custom email service required).
+  const addUser = async (userData: Partial<UserProfile> & { fullName: string; email: string; role: UserRole }): Promise<boolean> => {
+    const email = userData.email.trim().toLowerCase();
+    const inviteId = sanitizeEmailForId(email);
     const isLegalPro = ['commissioner', 'advocate', 'notary', 'judicial_officer', 'justice_of_peace'].includes(userData.role);
-    
-    const newUser: UserProfile = {
-      id: newId,
+
+    const invite: PendingInvite = {
+      id: inviteId,
+      email,
       fullName: userData.fullName,
-      email: userData.email,
-      phone: userData.phone || '+256 700 000 000',
       role: userData.role,
-      avatarUrl: userData.avatarUrl || '',
-      nationalIdNumber: userData.nationalIdNumber || `CM${Math.floor(10000000 + Math.random() * 90000000)}112A`,
+      phone: userData.phone || undefined,
       stationCity: userData.stationCity || 'Kampala',
+      nationalIdNumber: userData.nationalIdNumber || undefined,
       lawFirmName: userData.lawFirmName || (isLegalPro ? 'Independent Chambers' : undefined),
       firmName: userData.firmName || null,
-      enrollmentNumber: userData.enrollmentNumber || (isLegalPro ? `UG/ENR/${Math.floor(1000 + Math.random() * 9000)}/2026` : undefined),
-      isProSubscriber: userData.isProSubscriber || false,
-      rating: 5.0,
-      reviewCount: 0,
-      completedCeremoniesCount: 0,
-      averageResponseMinutes: isLegalPro ? 5 : 0,
-      indicativeFeeUGX: isLegalPro ? 10000 : 0,
-      availableNow: true,
-      allowsRemote: true,
-      authorities: userData.authorities || (isLegalPro ? [
-        {
-          type: userData.role === 'commissioner' ? 'commissioner_for_oaths' : (userData.role === 'notary' ? 'notary_public' : (userData.role === 'judicial_officer' ? 'judicial_officer' : 'advocate')),
-          status: 'VERIFIED',
-          basis: 'COMMISSIONER_ACT_CAP_5',
-          yearOfAdmission: 2024,
-          practisingCertificateYear: 2026,
-          verifiedAt: new Date().toISOString(),
-          licenceNumber: `LIC-UG-${Math.floor(10000 + Math.random() * 90000)}`
-        }
-      ] : []),
-      ...userData
+      enrollmentNumber: userData.enrollmentNumber || undefined,
+      invitedAt: new Date().toISOString(),
+      invitedByEmail: currentUser.email,
     };
 
-    setUsers(prev => [newUser, ...prev]);
+    try {
+      await setDoc(doc(db, 'pendingInvites', inviteId), invite, { merge: true });
+      await sendSignInLinkToEmail(auth, email, buildInviteActionCodeSettings(email));
 
-    logAdminAction({
-      action: 'USER_CREATED',
-      targetType: 'USER',
-      targetId: newId,
-      targetName: newUser.fullName,
-      newStatus: newUser.role,
-      reason: `Super Admin added new user profile with role ${newUser.role.toUpperCase()}`
-    });
+      logAdminAction({
+        action: 'USER_INVITED',
+        targetType: 'USER',
+        targetId: inviteId,
+        targetName: invite.fullName,
+        newStatus: invite.role,
+        reason: `Master Admin invited a new ${invite.role.toUpperCase()} account by email (${email}).`
+      });
 
-    addNotification(
-      'User Account Created',
-      `${newUser.fullName} has been registered with role ${newUser.role.toUpperCase()}.`,
-      'SYSTEM'
+      addNotification(
+        'Invitation Email Sent',
+        `${invite.fullName} (${email}) has been emailed a link to set up their account.`,
+        'SYSTEM'
+      );
+      return true;
+    } catch (err: any) {
+      console.error('Failed to send account invite:', err);
+      const code = err?.code || '';
+      let reason = err?.message || 'Unknown error.';
+      if (code === 'auth/operation-not-allowed') {
+        reason = 'Email link sign-in isn\'t enabled on this Firebase project yet — enable "Email link (passwordless sign-in)" under Authentication → Sign-in method in the Firebase Console.';
+      } else if (code === 'auth/unauthorized-continue-uri') {
+        reason = `This site's domain (${window.location.origin}) isn't on the Firebase project's Authorized Domains list — add it under Authentication → Settings → Authorized domains in the Firebase Console.`;
+      }
+      addNotification(
+        'Invitation Failed To Send',
+        `Could not email ${invite.fullName} (${email}) an activation link. Reason: ${reason}`,
+        'SYSTEM'
+      );
+      return false;
+    }
+  };
+
+  const resendInvite = async (inviteId: string): Promise<void> => {
+    const invite = pendingInvites.find(i => i.id === inviteId);
+    if (!invite) return;
+    try {
+      await sendSignInLinkToEmail(auth, invite.email, buildInviteActionCodeSettings(invite.email));
+      addNotification('Invitation Resent', `A new activation link was emailed to ${invite.email}.`, 'SYSTEM');
+    } catch (err: any) {
+      addNotification(
+        'Resend Failed',
+        `Could not resend the activation email to ${invite.email}. Reason: ${err?.message || 'unknown error'}.`,
+        'SYSTEM'
+      );
+    }
+  };
+
+  const cancelInvite = (inviteId: string) => {
+    const invite = pendingInvites.find(i => i.id === inviteId);
+    deleteDoc(doc(db, 'pendingInvites', inviteId)).catch(err =>
+      console.warn('Cancel invite notice:', err?.message)
     );
-
-    return newUser;
+    if (invite) {
+      logAdminAction({
+        action: 'USER_INVITE_CANCELLED',
+        targetType: 'USER',
+        targetId: inviteId,
+        targetName: invite.fullName,
+        reason: `Master Admin cancelled a pending account invite for ${invite.email}.`
+      });
+    }
   };
 
   const updateUserRole = (userId: string, newRole: UserRole) => {
@@ -1965,6 +2067,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setDeviceMode,
       switchUser,
       addUser,
+      pendingInvites,
+      resendInvite,
+      cancelInvite,
       updateUserRole,
       deleteUser,
       updateCurrentUser,
