@@ -36,16 +36,24 @@ const ROLE_OPTIONS: { role: UserRole; label: string; category: string; badgeColo
 ];
 
 export const UserManagementSection: React.FC = () => {
-  const { 
-    users, 
-    currentUser, 
-    addUser, 
-    updateUserRole, 
-    deleteUser, 
-    switchUser, 
-    setOperatingView, 
-    setCurrentView 
+  const {
+    users,
+    allPlatformUsers,
+    currentUser,
+    addUser,
+    updateUserRole,
+    deleteUser,
+    switchUser,
+    setOperatingView,
+    setCurrentView
   } = useApp();
+
+  // `users` only ever holds mock/seed accounts plus ADMITTED commissioners
+  // (kept lean for bandwidth/privacy — every non-admin session loads it).
+  // `allPlatformUsers` is the real full roster, streamed only for admins —
+  // every account that's ever registered, any role, any status. Fall back
+  // to `users` for an instant while the listener's first snapshot lands.
+  const allUsers = allPlatformUsers.length > 0 ? allPlatformUsers : users;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'ALL' | 'DEPONENTS' | 'LEGAL' | 'JUDICIARY' | 'ADMINS'>('ALL');
@@ -66,7 +74,7 @@ export const UserManagementSection: React.FC = () => {
 
   // Filtered users calculation
   const filteredUsers = useMemo(() => {
-    return users.filter(user => {
+    return allUsers.filter(user => {
       // Search matching
       const query = searchQuery.trim().toLowerCase();
       const matchesSearch = !query || 
@@ -95,18 +103,18 @@ export const UserManagementSection: React.FC = () => {
 
       return true;
     });
-  }, [users, searchQuery, roleFilter]);
+  }, [allUsers, searchQuery, roleFilter]);
 
   // Statistics calculation
   const stats = useMemo(() => {
     return {
-      total: users.length,
-      deponents: users.filter(u => u.role === 'deponent' || u.role === 'user').length,
-      commissioners: users.filter(u => ['commissioner', 'advocate', 'notary'].includes(u.role)).length,
-      judicial: users.filter(u => ['judicial_officer', 'justice_of_peace'].includes(u.role)).length,
-      admins: users.filter(u => ['super_admin', 'master_admin', 'admin'].includes(u.role)).length,
+      total: allUsers.length,
+      deponents: allUsers.filter(u => u.role === 'deponent' || u.role === 'user').length,
+      commissioners: allUsers.filter(u => ['commissioner', 'advocate', 'notary'].includes(u.role)).length,
+      judicial: allUsers.filter(u => ['judicial_officer', 'justice_of_peace'].includes(u.role)).length,
+      admins: allUsers.filter(u => ['super_admin', 'master_admin', 'admin'].includes(u.role)).length,
     };
-  }, [users]);
+  }, [allUsers]);
 
   const handleCreateUserSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -261,7 +269,7 @@ export const UserManagementSection: React.FC = () => {
         {/* Role Tabs */}
         <div className="flex flex-wrap items-center gap-1.5">
           {[
-            { id: 'ALL', label: `All (${users.length})` },
+            { id: 'ALL', label: `All (${stats.total})` },
             { id: 'DEPONENTS', label: `Deponents (${stats.deponents})` },
             { id: 'LEGAL', label: `Commissioners (${stats.commissioners})` },
             { id: 'JUDICIARY', label: `Judicial (${stats.judicial})` },

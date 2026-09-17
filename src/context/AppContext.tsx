@@ -67,6 +67,13 @@ interface AppContextType {
   currentUser: UserProfile;
   users: UserProfile[];
   commissionerAdmissions: UserProfile[];
+  // EVERY account that has ever registered on the platform, of every role —
+  // deponents included — regardless of admission/active status. Populated
+  // only for admins (see the listener in the provider); empty otherwise.
+  // This is the real data source behind "view all platform users" in the
+  // admin console, since `users` above deliberately excludes plain
+  // deponents and non-admitted professionals for bandwidth/privacy reasons.
+  allPlatformUsers: UserProfile[];
   requests: CommissioningRequest[];
   drafts: DocumentDraft[];
   activeDraftId: string | null;
@@ -180,6 +187,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // below). Deliberately kept separate from `users`, which only ever holds
   // ADMITTED commissioners for the public marketplace.
   const [commissionerAdmissions, setCommissionerAdmissions] = useState<UserProfile[]>([]);
+  const [allPlatformUsers, setAllPlatformUsers] = useState<UserProfile[]>([]);
   // Always start blank. If a previous Firebase session is still valid, the
   // onAuthStateChanged listener below fills in the real profile moments
   // after mount — the app never guesses or assumes an identity up front.
@@ -589,6 +597,74 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [isSignedIn, isMasterAdmin]);
 
   // ---------------------------------------------------------------------------
+  // Every platform user, of every role (Master Admin only).
+  // The admission queue effect above only ever surfaces commissioner-like
+  // accounts. This effect streams the ENTIRE users collection — deponents,
+  // law firm admins, other admins, everyone who has ever registered,
+  // regardless of role or admission/active status — so the admin console's
+  // User Management view can genuinely show every platform user, not just
+  // the professionals up for admission.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!isSignedIn || !isMasterAdmin) {
+      setAllPlatformUsers([]);
+      return;
+    }
+
+    let unsub: (() => void) | undefined;
+    try {
+      unsub = onSnapshot(collection(db, 'users'), (snap) => {
+        const all: UserProfile[] = [];
+        snap.forEach((d) => {
+          const data: any = d.data() || {};
+          const email = (data.email || '').toLowerCase();
+          const rawRole = (data.role || 'deponent').toLowerCase();
+          const role = (rawRole === 'user' ? 'deponent' : rawRole) as UserRole;
+
+          all.push({
+            id: data.id || d.id,
+            fullName: data.fullName || data.displayName || (email ? email.split('@')[0] : 'Unnamed User'),
+            email: data.email || '',
+            phone: data.phone || data.phoneNumber || '',
+            role,
+            avatarUrl: data.avatarUrl || data.profilePhotoUrl || '',
+            nationalIdNumber: data.nationalIdNumber || undefined,
+            stationCity: data.location || data.stationCity || 'Kampala',
+            lawFirmName: data.lawFirmName || data.firmName || undefined,
+            firmName: data.firmName || null,
+            professionalCategory: data.professionalCategory || undefined,
+            authorities: Array.isArray(data.authorities) ? data.authorities : [],
+            isProSubscriber: !!data.isProSubscriber,
+            rating: typeof data.rating === 'number' ? data.rating : 5.0,
+            reviewCount: data.reviewCount || 0,
+            completedCeremoniesCount: data.completedCeremoniesCount || 0,
+            averageResponseMinutes: data.averageResponseMinutes || 5,
+            indicativeFeeUGX: typeof data.fee === 'number' ? data.fee : (data.indicativeFeeUGX || 25000),
+            availableNow: !!data.availableNow,
+            allowsRemote: data.allowsRemote !== undefined ? !!data.allowsRemote : true,
+            lastActiveAt: data.lastActiveAt || undefined,
+            admissionStatus: data.admissionStatus || null,
+            admissionDecisionAt: data.admissionDecisionAt || undefined,
+            admissionDecisionBy: data.admissionDecisionBy || undefined,
+            admissionDecisionReason: data.admissionDecisionReason || undefined,
+            createdAt: data.createdAt || undefined,
+          } as UserProfile);
+        });
+        // Newest registrations first, so recently-signed-up (and any
+        // no-longer-active) accounts are easy to find.
+        all.sort((a, b) => new Date((b as any).createdAt || 0).getTime() - new Date((a as any).createdAt || 0).getTime());
+        setAllPlatformUsers(all);
+      }, (err) => console.warn('All-users listener notice:', err?.message));
+    } catch (e) {
+      console.warn('Could not attach all-users listener', e);
+    }
+
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [isSignedIn, isMasterAdmin]);
+
+  // ---------------------------------------------------------------------------
   // Presence heartbeat.
   // Firestore has no server-side "disconnect" hook (unlike Realtime Database's
   // onDisconnect), so live "who's online" is approximated: while a signed-in
@@ -770,7 +846,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const switchUser = (userId: string) => {
-    const target = users.find(u => u.id === userId);
+    // Look beyond the lean `users` list — the admin's User Management view
+    // can target any account in `allPlatformUsers` (every real registrant),
+    // not just the mock/seed + admitted-commissioner subset.
+    const target = users.find(u => u.id === userId) || allPlatformUsers.find(u => u.id === userId);
     if (target) {
       setCurrentUser(target);
       if (target.role === 'master_admin' || target.role === 'super_admin' || target.role === 'admin' || isSuperAdminEmail(target.email)) {
@@ -853,7 +932,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    const targetUser = users.find(u => u.id === userId);
+    const targetUser = users.find(u => u.id === userId) || allPlatformUsers.find(u => u.id === userId);
     if (!targetUser) return;
 
     const oldRole = targetUser.role;
@@ -922,7 +1001,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       alert('Security Protection: You cannot delete the currently active administrator account.');
       return;
     }
-    const target = users.find(u => u.id === userId);
+    const target = users.find(u => u.id === userId) || allPlatformUsers.find(u => u.id === userId);
     if (!target) return;
 
     setUsers(prev => prev.filter(u => u.id !== userId));
@@ -1857,6 +1936,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       currentUser,
       users,
       commissionerAdmissions,
+      allPlatformUsers,
       requests,
       drafts,
       activeDraftId,
