@@ -253,15 +253,19 @@ export const PhotoSelectionModal: React.FC<PhotoSelectionModalProps> = ({ isOpen
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn overflow-y-auto"
+      className="fixed inset-0 z-50 flex p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn overflow-y-auto"
       style={{
         paddingTop: 'max(1rem, env(safe-area-inset-top))',
         paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
       }}
       id="photo-selection-modal-backdrop"
     >
+      {/* Centered via auto margins, not align-items/justify-content — those
+          clip an over-tall modal unscrollably at the top on short screens;
+          margin:auto centers when there's room and falls back to flush
+          top-of-scroll placement (fully reachable) when there isn't. */}
       <div
-        className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden flex flex-col my-auto text-slate-900 animate-scaleUp"
+        className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden flex flex-col m-auto text-slate-900 animate-scaleUp"
         style={{ maxHeight: 'min(90vh, 90dvh)' }}
         id="photo-selection-modal"
       >
