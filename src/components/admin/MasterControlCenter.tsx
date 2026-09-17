@@ -14,6 +14,7 @@ import { AdvertisingSection } from './AdvertisingSection';
 import { UserManagementSection } from './UserManagementSection';
 import { ApiGatewayConfigModal } from './ApiGatewayConfigModal';
 import { UserAvatar } from '../common/UserAvatar';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 import { 
   Scale, 
   TrendingUp, 
@@ -166,19 +167,25 @@ export const MasterControlCenter: React.FC = () => {
         })}
       </div>
 
-      {/* Main Section Content */}
+      {/* Main Section Content — each tab is isolated in its own error
+          boundary, keyed to the active tab, so a crash in one section
+          never takes down the navigation or any other tab. Switching tabs
+          (which changes resetKey) always recovers, even from a section that
+          just threw. */}
       <div className="min-h-[400px]">
-        {masterAdminSection === 'OVERVIEW' && <PlatformOverviewSection />}
-        {masterAdminSection === 'FINANCIAL' && <FinancialRevenueSection />}
-        {masterAdminSection === 'WALLET' && <OverallWalletSection />}
-        {masterAdminSection === 'DOCUMENTS' && <DocumentsManagementSection />}
-        {masterAdminSection === 'PROFESSIONALS' && <ProfessionalNetworkSection />}
-        {masterAdminSection === 'VERIFICATION_QUEUE' && <CredentialVerificationQueue />}
-        {masterAdminSection === 'ADMISSIONS' && <CommissionerAdmissionQueue />}
-        {masterAdminSection === 'AUDIT_LOGS' && <AdminAuditLogSection />}
-        {masterAdminSection === 'RULES_FEES' && <StatutoryLegalRulesSection />}
-        {masterAdminSection === 'ADVERTISING' && <AdvertisingSection />}
-        {masterAdminSection === 'USERS' && <UserManagementSection />}
+        <ErrorBoundary label={navTabs.find(t => t.id === masterAdminSection)?.label} resetKey={masterAdminSection}>
+          {masterAdminSection === 'OVERVIEW' && <PlatformOverviewSection />}
+          {masterAdminSection === 'FINANCIAL' && <FinancialRevenueSection />}
+          {masterAdminSection === 'WALLET' && <OverallWalletSection />}
+          {masterAdminSection === 'DOCUMENTS' && <DocumentsManagementSection />}
+          {masterAdminSection === 'PROFESSIONALS' && <ProfessionalNetworkSection />}
+          {masterAdminSection === 'VERIFICATION_QUEUE' && <CredentialVerificationQueue />}
+          {masterAdminSection === 'ADMISSIONS' && <CommissionerAdmissionQueue />}
+          {masterAdminSection === 'AUDIT_LOGS' && <AdminAuditLogSection />}
+          {masterAdminSection === 'RULES_FEES' && <StatutoryLegalRulesSection />}
+          {masterAdminSection === 'ADVERTISING' && <AdvertisingSection />}
+          {masterAdminSection === 'USERS' && <UserManagementSection />}
+        </ErrorBoundary>
       </div>
 
       {/* API Gateway Secrets Configuration Modal */}

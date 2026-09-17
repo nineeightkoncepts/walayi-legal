@@ -46,7 +46,7 @@ export const CredentialVerificationQueue: React.FC = () => {
 
   const handleApprove = (userId: string, docId: string, authType?: AuthorityType) => {
     const authority = authType || 'commissioner_for_oaths';
-    reviewCredentialDocument(userId, docId, 'VERIFIED', authority, 'Practitioner warrant verified against Law Council Roll.');
+    reviewCredentialDocument(userId, docId, 'VERIFIED', 'Practitioner warrant verified against Law Council Roll.');
     addNotification('Credential Approved', `Document verified for ${authority.replace(/_/g, ' ')}.`, 'SUCCESS');
     setSelectedDoc(null);
   };
@@ -62,7 +62,6 @@ export const CredentialVerificationQueue: React.FC = () => {
         rejectTarget.userId,
         rejectTarget.doc.id,
         'REJECTED',
-        rejectTarget.doc.authorityType || 'commissioner_for_oaths',
         reason
       );
       setRejectTarget(null);

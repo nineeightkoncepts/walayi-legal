@@ -1,6 +1,16 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { CommissioningRequest } from '../../types';
+import { CommissioningRequest, DocumentType } from '../../types';
+
+// The filter chips use human-facing category ids that don't map 1:1 onto
+// DocumentType's own values (and one, COMMERCIAL_CONTRACT, has no
+// corresponding document type at all yet) — this is the translation layer.
+const CATEGORY_TO_DOCUMENT_TYPE: Record<string, DocumentType> = {
+  AFFIDAVIT: 'affidavit_general',
+  STATUTORY_DECLARATION: 'statutory_declaration',
+  NOTARIAL_DEED: 'notarial_attestation',
+  DEED_POLL: 'deed_poll',
+};
 import { 
   FileText, 
   Search, 
@@ -28,7 +38,7 @@ export const DocumentsManagementSection: React.FC = () => {
   const filteredDocs進 = useMemo(() => {
     return requests.filter(r => {
       // Category filter
-      if (categoryFilter !== 'ALL' && r.serviceCategory !== categoryFilter) return false;
+      if (categoryFilter !== 'ALL' && r.documentType !== CATEGORY_TO_DOCUMENT_TYPE[categoryFilter]) return false;
 
       // Status filter
       if (statusFilter !== 'ALL' && r.status !== statusFilter) return false;
@@ -146,7 +156,7 @@ export const DocumentsManagementSection: React.FC = () => {
                 <tr key={r.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-4 py-3 font-mono-code font-bold text-blue-700">{r.certificateNumber}</td>
                   <td className="px-4 py-3 font-semibold text-slate-900">{r.documentTitle}</td>
-                  <td className="px-4 py-3 capitalize text-slate-600">{r.serviceCategory.replace(/_/g, ' ').toLowerCase()}</td>
+                  <td className="px-4 py-3 capitalize text-slate-600">{r.documentType.replace(/_/g, ' ').toLowerCase()}</td>
                   <td className="px-4 py-3">{r.deponentName}</td>
                   <td className="px-4 py-3 font-medium text-slate-800">{r.assignedProfessionalName}</td>
                   <td className="px-4 py-3 font-mono-code font-bold text-slate-900">UGX {r.totalAmountUGX.toLocaleString()}</td>

@@ -24,8 +24,8 @@ export const SuperAdminDashboard: React.FC = () => {
     users, 
     requests, 
     transactions, 
-    platformFeePercentage, 
-    setPlatformFeePercentage,
+    platformFeePercentage,
+    setPlatformFee,
     updateAuthorityStatus,
     addNotification 
   } = useApp();
@@ -51,7 +51,7 @@ export const SuperAdminDashboard: React.FC = () => {
     e.preventDefault();
     const val = parseFloat(feeInput);
     if (!isNaN(val) && val >= 0 && val <= 30) {
-      setPlatformFeePercentage(val);
+      setPlatformFee(val);
       addNotification('Fee Updated', `WALAYI Platform Fee updated to ${val}%.`, 'SUCCESS');
     }
   };

@@ -24,6 +24,7 @@ import { OfflineIndicator } from './components/common/OfflineIndicator';
 import { IncomingCallBanner } from './components/common/IncomingCallBanner';
 import { PrivacyNoticeView } from './components/legal/PrivacyNoticeView';
 import { TermsAndConditionsView } from './components/legal/TermsAndConditionsView';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { canAccessView, resolveAccessibleView } from './services/roleService';
 
 // Global notification toast component
@@ -103,22 +104,27 @@ const MainContent: React.FC = () => {
 
   return (
     <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
-      {currentView === 'home' && <HomeView />}
-      {currentView === 'marketplace' && <MarketplaceView />}
-      {currentView === 'new-commissioning' && <NewCommissioningModal />}
-      {currentView === 'room' && <DailyCommissioningRoom />}
-      {currentView === 'documents' && <DocumentsView />}
-      {currentView === 'commissioner-dashboard' && <CommissionerDashboard />}
-      {currentView === 'commissioner-settings' && <CommissionerSettings />}
-      {currentView === 'vault' && <CredentialVaultView />}
-      {currentView === 'wallet' && <WalletView />}
-      {(currentView === 'verify' || currentView === 'verify-portal' || currentView === 'verification') && <VerificationPortal />}
-      {currentView === 'admin' && (isMasterAdmin ? <MasterControlCenter /> : <SuperAdminDashboard />)}
-      {currentView === 'pro' && <ProSubscriptionView />}
-      {currentView === 'onboarding' && <AuthorityOnboardingModal />}
-      {currentView === 'auth' && <HomeView />}
-      {currentView === 'privacy' && <PrivacyNoticeView />}
-      {currentView === 'terms' && <TermsAndConditionsView />}
+      {/* Isolated per top-level view, keyed to it, so a crash in one view
+          (e.g. a broken admin tab) can't take the whole app to a blank
+          screen — navigating to any other view still works. */}
+      <ErrorBoundary resetKey={currentView}>
+        {currentView === 'home' && <HomeView />}
+        {currentView === 'marketplace' && <MarketplaceView />}
+        {currentView === 'new-commissioning' && <NewCommissioningModal />}
+        {currentView === 'room' && <DailyCommissioningRoom />}
+        {currentView === 'documents' && <DocumentsView />}
+        {currentView === 'commissioner-dashboard' && <CommissionerDashboard />}
+        {currentView === 'commissioner-settings' && <CommissionerSettings />}
+        {currentView === 'vault' && <CredentialVaultView />}
+        {currentView === 'wallet' && <WalletView />}
+        {(currentView === 'verify' || currentView === 'verify-portal' || currentView === 'verification') && <VerificationPortal />}
+        {currentView === 'admin' && (isMasterAdmin ? <MasterControlCenter /> : <SuperAdminDashboard />)}
+        {currentView === 'pro' && <ProSubscriptionView />}
+        {currentView === 'onboarding' && <AuthorityOnboardingModal />}
+        {currentView === 'auth' && <HomeView />}
+        {currentView === 'privacy' && <PrivacyNoticeView />}
+        {currentView === 'terms' && <TermsAndConditionsView />}
+      </ErrorBoundary>
     </main>
   );
 };

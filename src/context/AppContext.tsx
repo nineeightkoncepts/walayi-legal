@@ -13,7 +13,9 @@ import {
   CredentialDocument,
   CommissioningStatus,
   AuditEvent,
-  DocumentDraft
+  DocumentDraft,
+  AuthorityType,
+  AuthorityStatus
 } from '../types';
 import { 
   INITIAL_USERS, 
@@ -137,6 +139,7 @@ interface AppContextType {
   processRefund: (transactionId: string, reason: string) => Promise<boolean>;
   resolveDispute: (id: string, resolution: 'REFUND' | 'RELEASE' | 'DISMISS', note?: string) => void;
   toggleProfessionalStatus: (userId: string, action: 'SUSPEND' | 'REINSTATE' | 'APPROVE' | 'REJECT', reason?: string) => void;
+  updateAuthorityStatus: (userId: string, authorityType: AuthorityType, newStatus: AuthorityStatus, reason?: string) => void;
   setCommissionerAdmission: (
     userId: string,
     status: 'ADMITTED' | 'REJECTED' | 'SUSPENDED',
@@ -1074,6 +1077,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  // Updates ONE authority entry (e.g. just their commissioner_for_oaths
+  // warrant) rather than every authority a professional holds — the
+  // per-credential approve/reject action in the Professional Network
+  // section, distinct from toggleProfessionalStatus's account-wide
+  // suspend/reinstate.
+  const updateAuthorityStatus = (
+    userId: string,
+    authorityType: AuthorityType,
+    newStatus: AuthorityStatus,
+    reason?: string
+  ) => {
+    const userObj = users.find(u => u.id === userId);
+    const previousStatus = userObj?.authorities.find(a => a.type === authorityType)?.status;
+
+    const updatedAuthorities = userObj?.authorities.map(a =>
+      a.type === authorityType ? { ...a, status: newStatus } : a
+    );
+
+    setUsers(prev => prev.map(u => (
+      u.id === userId && updatedAuthorities ? { ...u, authorities: updatedAuthorities } : u
+    )));
+
+    if (updatedAuthorities) {
+      updateDoc(doc(db, 'users', userId), { authorities: updatedAuthorities }).catch((err) =>
+        console.warn('Authority status update notice:', err?.message)
+      );
+    }
+
+    logAdminAction({
+      action: `AUTHORITY_${authorityType.toUpperCase()}_${newStatus}`,
+      targetType: 'USER',
+      targetId: userId,
+      targetName: userObj?.fullName || 'Professional',
+      previousStatus,
+      newStatus,
+      reason: reason || `Master Admin set ${authorityType} authority to ${newStatus}.`
+    });
+  };
+
   // The real enforcement point for Section 3/11 of the brief: a Master Admin
   // reviewing the admission queue and deciding whether a commissioner-like
   // account may participate in the marketplace. Writes admissionStatus to
@@ -1852,6 +1894,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       processRefund,
       resolveDispute,
       toggleProfessionalStatus,
+      updateAuthorityStatus,
       setCommissionerAdmission
     }}>
       {children}

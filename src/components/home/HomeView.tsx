@@ -210,7 +210,7 @@ export const HomeView: React.FC = () => {
                     <span>•</span>
                     <span>{new Date(doc.createdAt).toLocaleDateString()}</span>
                     <span>•</span>
-                    <span>UGX {doc.feeUGX?.toLocaleString()}</span>
+                    <span>UGX {doc.totalAmountUGX?.toLocaleString()}</span>
                   </div>
                 </div>
 

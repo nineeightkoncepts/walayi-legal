@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp, AppView } from '../../context/AppContext';
 import { OperatingView } from '../../types';
 import { 
@@ -477,27 +478,39 @@ export const Navbar: React.FC = () => {
         </div>
       </div>
 
-      {/* Modals */}
-      <AboutLegalInfrastructureModal
-        isOpen={showAboutLegalModal}
-        onClose={() => setShowAboutLegalModal(false)}
-      />
-      <ProfileAccountModal
-        isOpen={showProfileModal}
-        onClose={() => setShowProfileModal(false)}
-        onOpenAboutLegal={() => {
-          setShowProfileModal(false);
-          setShowAboutLegalModal(true);
-        }}
-      />
-      <PhotoSelectionModal
-        isOpen={showPhotoSelectionModal}
-        onClose={() => setShowPhotoSelectionModal(false)}
-      />
-      <MasterAdminShieldConsole
-        isOpen={showShieldConsole}
-        onClose={() => setShowShieldConsole(false)}
-      />
+      {/* Modals — portalled straight to document.body. This header is
+          `position: sticky` with a z-index, which makes it a CSS stacking
+          context: any `position: fixed` modal rendered as its descendant
+          gets capped inside that context no matter what z-index the modal
+          itself declares, so page content elsewhere (e.g. an admin tab's
+          own modal) can end up painted on top of it. Rendering via a
+          portal escapes that entirely — these always sit at the true root
+          stacking context, above everything else on the page. */}
+      {typeof document !== 'undefined' && createPortal(
+        <>
+          <AboutLegalInfrastructureModal
+            isOpen={showAboutLegalModal}
+            onClose={() => setShowAboutLegalModal(false)}
+          />
+          <ProfileAccountModal
+            isOpen={showProfileModal}
+            onClose={() => setShowProfileModal(false)}
+            onOpenAboutLegal={() => {
+              setShowProfileModal(false);
+              setShowAboutLegalModal(true);
+            }}
+          />
+          <PhotoSelectionModal
+            isOpen={showPhotoSelectionModal}
+            onClose={() => setShowPhotoSelectionModal(false)}
+          />
+          <MasterAdminShieldConsole
+            isOpen={showShieldConsole}
+            onClose={() => setShowShieldConsole(false)}
+          />
+        </>,
+        document.body
+      )}
     </header>
   );
 };

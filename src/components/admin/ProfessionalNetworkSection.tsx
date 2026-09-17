@@ -73,8 +73,8 @@ export const ProfessionalNetworkSection: React.FC = () => {
 
   const handleConfirmSuspension = (reason: string) => {
     if (suspensionTarget) {
-      const isCurrentlySuspended = suspensionTarget.authorities.every(a => a.status === 'SUSPENDED');
-      toggleProfessionalStatus(suspensionTarget.id, !isCurrentlySuspended, reason);
+      const isCurrentlySuspended = suspensionTarget.authorities.every(a => a.status === 'MARKETPLACE_SUSPENDED');
+      toggleProfessionalStatus(suspensionTarget.id, isCurrentlySuspended ? 'REINSTATE' : 'SUSPEND', reason);
       setSuspensionTarget(null);
     }
   };
@@ -152,7 +152,7 @@ export const ProfessionalNetworkSection: React.FC = () => {
       {/* Practitioner Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {filteredPros.map((pro) => {
-          const isSuspended = pro.authorities.every(a => a.status === 'SUSPENDED');
+          const isSuspended = pro.authorities.every(a => a.status === 'MARKETPLACE_SUSPENDED');
           return (
             <div
               key={pro.id}
@@ -267,14 +267,14 @@ export const ProfessionalNetworkSection: React.FC = () => {
         isOpen={isSuspendModalOpen}
         onClose={() => setIsSuspendModalOpen(false)}
         onConfirm={handleConfirmSuspension}
-        title={suspensionTarget?.authorities.every(a => a.status === 'SUSPENDED') ? 'Reinstate Practitioner' : 'Suspend Legal Practitioner'}
+        title={suspensionTarget?.authorities.every(a => a.status === 'MARKETPLACE_SUSPENDED') ? 'Reinstate Practitioner' : 'Suspend Legal Practitioner'}
         description={
-          suspensionTarget?.authorities.every(a => a.status === 'SUSPENDED')
+          suspensionTarget?.authorities.every(a => a.status === 'MARKETPLACE_SUSPENDED')
             ? `Reinstating ${suspensionTarget?.fullName} will restore their statutory commissioning authority and marketplace listings.`
             : `Suspending ${suspensionTarget?.fullName} will immediately revoke their ability to accept affidavits and sign digital jurats across the WALAYI platform.`
         }
-        actionButtonText={suspensionTarget?.authorities.every(a => a.status === 'SUSPENDED') ? 'Confirm Reinstatement' : 'Confirm Suspension'}
-        isDestructive={!suspensionTarget?.authorities.every(a => a.status === 'SUSPENDED')}
+        actionButtonText={suspensionTarget?.authorities.every(a => a.status === 'MARKETPLACE_SUSPENDED') ? 'Confirm Reinstatement' : 'Confirm Suspension'}
+        isDestructive={!suspensionTarget?.authorities.every(a => a.status === 'MARKETPLACE_SUSPENDED')}
         targetDetails={suspensionTarget ? [
           { label: 'Practitioner', value: suspensionTarget.fullName },
           { label: 'Email', value: suspensionTarget.email },
