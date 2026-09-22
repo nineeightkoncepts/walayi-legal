@@ -19,7 +19,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { AuditCertificateModal } from '../common/AuditCertificateModal';
-import { downloadCertifiedInstrumentPdf } from '../../services/pdfService';
+import { downloadFinalInstrumentPdf } from '../../services/pdfOverlayService';
 
 // Maps the many granular CommissioningRequest statuses onto the five
 // stages the brief requires My Documents to show clearly.
@@ -274,7 +274,12 @@ export const DocumentsView: React.FC = () => {
                   <button
                     onClick={async () => {
                       try {
-                        await downloadCertifiedInstrumentPdf(req);
+                        // Always prefer the deponent's real uploaded
+                        // document with the actual signatures/stamp placed
+                        // on it — this only falls back to the synthetic
+                        // certificate PDF internally when the original
+                        // source genuinely wasn't a real PDF to begin with.
+                        await downloadFinalInstrumentPdf(req);
                       } catch (e) {
                         setSelectedTab('instrument');
                         setSelectedDoc(req);
