@@ -417,12 +417,17 @@ export interface CommissioningRequest {
   completedAt?: string;
 
   rawFileUrl?: string;
-  // The real MIME type of the uploaded file at rawFileUrl. Only when this is
-  // exactly 'application/pdf' can the final instrument be built by overlaying
-  // signatures directly onto the original document's own pages (pdf-lib can't
-  // parse .doc/.docx) — otherwise the system falls back to a freshly composed
-  // certificate PDF that doesn't carry the original file's content.
+  // The real MIME type of the uploaded file at rawFileUrl. When this is
+  // 'application/pdf', signatures overlay directly onto the original's own
+  // pages. A Word upload (.docx) is instead converted once to a real PDF
+  // rendering of its actual content (see docConversionService), cached at
+  // convertedPdfUrl, and overlaid the same way from then on. Only a
+  // genuinely unconvertible file (e.g. legacy binary .doc) falls back to a
+  // freshly composed certificate PDF that doesn't carry the original
+  // content.
   originalMimeType?: string;
+  // Cached PDF rendering of a non-PDF original — see originalMimeType.
+  convertedPdfUrl?: string;
   documentContent?: string;
   fileName: string;
   fileSizeKb: number;

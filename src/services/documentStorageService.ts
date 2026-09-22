@@ -26,6 +26,20 @@ export async function uploadCommissioningDocument(requestId: string, file: File)
 }
 
 /**
+ * Uploads the PDF rendering of a non-PDF original (currently: Word .docx,
+ * converted via docConversionService) so it can be reused across the
+ * interactive signature-placement step and the final download without
+ * reconverting each time. Overwrites any previous conversion for the same
+ * request — there's only ever one "current" converted PDF per request.
+ */
+export async function uploadConvertedPdf(requestId: string, pdfBytes: Uint8Array): Promise<string> {
+  const storagePath = `commissioningDocuments/${requestId}/converted.pdf`;
+  const storageRef = ref(storage, storagePath);
+  await uploadBytes(storageRef, pdfBytes, { contentType: 'application/pdf' });
+  return getDownloadURL(storageRef);
+}
+
+/**
  * Uploads a document a user has started but not yet submitted to a
  * Commissioner, keyed by a draft id rather than a commissioning request id
  * (a draft has no request yet). This is what lets "save as draft and

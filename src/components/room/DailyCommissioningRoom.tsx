@@ -55,6 +55,7 @@ import { BrandLogo } from '../common/BrandLogo';
 import { UserAvatar } from '../common/UserAvatar';
 import { PlatformFeeSheet } from '../payment/PlatformFeeSheet';
 import { downloadFinalInstrumentPdf } from '../../services/pdfOverlayService';
+import { ensureOverlayablePdfUrl, isWordDocument } from '../../services/docConversionService';
 
 export const DailyCommissioningRoom: React.FC = () => {
   const { 
@@ -144,10 +145,42 @@ export const DailyCommissioningRoom: React.FC = () => {
   const [pendingCommissionerMark, setPendingCommissionerMark] = useState<string | null>(null);
 
   const isPaymentPaid = activeRequest.paymentStatus === 'ESCROWED' || activeRequest.paymentStatus === 'RELEASED';
-  // Placement on the real document is only possible when the source file
-  // itself was a genuine PDF (pdf-lib can't parse .doc/.docx) — otherwise
-  // marks fall back to a default position at final-instrument build time.
-  const canPlaceOnOriginal = !!activeRequest.rawFileUrl && activeRequest.originalMimeType === 'application/pdf';
+
+  // A URL pdfjs/pdf-lib can actually open for the real uploaded document —
+  // a native PDF is used as-is; a Word (.docx) upload is converted once
+  // (real content, not a placeholder) and cached as convertedPdfUrl, so
+  // click-to-place-your-signature works on Word uploads exactly like it
+  // already does on PDF ones. Kicked off as soon as the room mounts so
+  // conversion has finished well before the signing step needs it.
+  const [overlayPdfUrl, setOverlayPdfUrl] = useState<string | null>(
+    activeRequest.originalMimeType === 'application/pdf'
+      ? (activeRequest.rawFileUrl || null)
+      : (activeRequest.convertedPdfUrl || null)
+  );
+
+  useEffect(() => {
+    if (overlayPdfUrl) return;
+    if (activeRequest.originalMimeType === 'application/pdf' && activeRequest.rawFileUrl) {
+      setOverlayPdfUrl(activeRequest.rawFileUrl);
+      return;
+    }
+    if (!isWordDocument(activeRequest.originalMimeType, activeRequest.fileName)) return;
+
+    let cancelled = false;
+    ensureOverlayablePdfUrl(activeRequest)
+      .then((url) => {
+        if (!cancelled) setOverlayPdfUrl(url);
+      })
+      .catch((err) => {
+        // Not fatal — placement just falls back to a default position, and
+        // the final download still gets a real overlay attempt of its own.
+        console.warn('Document conversion for placement notice:', err?.message);
+      });
+
+    return () => { cancelled = true; };
+  }, [activeRequest.id, activeRequest.rawFileUrl, activeRequest.originalMimeType, activeRequest.convertedPdfUrl, overlayPdfUrl]);
+
+  const canPlaceOnOriginal = !!overlayPdfUrl;
 
   const finalizeDeponentMark = (dataUrl: string, kind: ExecutionMethod, placement?: DocumentMarkPlacement) => {
     if (kind === 'SIGNATURE') {
@@ -1697,7 +1730,7 @@ export const DailyCommissioningRoom: React.FC = () => {
 
                     {pendingDeponentMark ? (
                       <PdfSignaturePlacer
-                        pdfUrl={activeRequest.rawFileUrl!}
+                        pdfUrl={overlayPdfUrl!}
                         markerImageUrl={pendingDeponentMark.dataUrl}
                         markerWidthPx={pendingDeponentMark.kind === 'THUMBPRINT' ? 60 : 130}
                         label="Click on the document to place your signature"
@@ -1867,7 +1900,7 @@ export const DailyCommissioningRoom: React.FC = () => {
               <div className="space-y-4">
                 {pendingCommissionerMark ? (
                   <PdfSignaturePlacer
-                    pdfUrl={activeRequest.rawFileUrl!}
+                    pdfUrl={overlayPdfUrl!}
                     markerImageUrl={pendingCommissionerMark}
                     markerWidthPx={130}
                     label="Click on the document to place your signature"

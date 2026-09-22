@@ -1,21 +1,24 @@
 import { PDFDocument, PDFPage, PDFFont, StandardFonts, rgb } from 'pdf-lib';
 import { CommissioningRequest, DocumentMarkPlacement } from '../types';
 import { buildCertifiedInstrumentPdf, downloadCertifiedInstrumentPdf } from './pdfService';
+import { ensureOverlayablePdfUrl } from './docConversionService';
 
 /**
- * Real "Fill & Sign" style finishing: takes the ACTUAL uploaded PDF bytes and
- * places the deponent's and commissioner's signatures (and the commissioner's
- * digital stamp) directly onto the document's own last page — the original
- * content is never redrawn or replaced, only marked up, exactly like Adobe
- * Fill & Sign. A WALAYI verification page (QR code, hash digests, statutory
- * citations — reusing the existing jsPDF-built certificate page) is appended
- * after the original pages so the instrument still carries independently
- * verifiable metadata.
+ * Real "Fill & Sign" style finishing: takes the ACTUAL uploaded document's
+ * real PDF bytes and places the deponent's and commissioner's signatures
+ * (and the commissioner's digital stamp) directly onto the document's own
+ * last page — the original content is never redrawn or replaced, only
+ * marked up, exactly like Adobe Fill & Sign. A WALAYI verification page
+ * (QR code, hash digests, statutory citations — reusing the existing
+ * jsPDF-built certificate page) is appended after the original pages so
+ * the instrument still carries independently verifiable metadata.
  *
- * This only works when the source file was a real PDF (rawFileUrl +
- * originalMimeType === 'application/pdf'); pdf-lib has no way to parse a
- * .doc/.docx. For anything else, callers should fall back to the synthetic
- * certificate PDF (downloadCertifiedInstrumentPdf in pdfService.ts).
+ * A native PDF upload is used as-is; a Word (.docx) upload is converted to
+ * a real PDF rendering of its own content first (see
+ * ensureOverlayablePdfUrl / docConversionService) and then overlaid the
+ * same way. Only a genuinely unconvertible source (e.g. legacy binary
+ * .doc, or no upload at all) falls back to the synthetic certificate PDF
+ * (downloadCertifiedInstrumentPdf in pdfService.ts).
  */
 
 const INK = rgb(0x0f / 255, 0x17 / 255, 0x2a / 255);
@@ -212,11 +215,13 @@ export async function placeSignaturesOnOriginal(pdfDoc: PDFDocument, request: Co
  * certificate PDF in that case).
  */
 export async function buildSignedOriginalInstrument(request: CommissioningRequest): Promise<Uint8Array> {
-  if (!request.rawFileUrl || request.originalMimeType !== 'application/pdf') {
-    throw new Error('NO_OVERLAYABLE_ORIGINAL');
-  }
+  // Throws NO_OVERLAYABLE_ORIGINAL / WORD_CONVERSION_FAILED for anything
+  // genuinely unusable (no upload, or an unconvertible legacy .doc) — the
+  // caller (downloadFinalInstrumentPdf) falls back to the synthetic
+  // certificate PDF for either.
+  const overlayUrl = await ensureOverlayablePdfUrl(request);
 
-  const originalBytes = await fetchBytes(request.rawFileUrl);
+  const originalBytes = await fetchBytes(overlayUrl);
   const pdfDoc = await PDFDocument.load(originalBytes, { ignoreEncryption: true });
 
   await placeSignaturesOnOriginal(pdfDoc, request);
@@ -265,7 +270,7 @@ export async function downloadFinalInstrumentPdf(request: CommissioningRequest):
     const bytes = await buildSignedOriginalInstrument(request);
     triggerPdfDownload(bytes, `WALAYI_Certified_Instrument_${safe}.pdf`);
   } catch (e: any) {
-    if (e?.message !== 'NO_OVERLAYABLE_ORIGINAL') {
+    if (e?.message !== 'NO_OVERLAYABLE_ORIGINAL' && e?.message !== 'WORD_CONVERSION_FAILED') {
       console.warn('Signed-original instrument build failed, falling back to certificate PDF:', e?.message);
     }
     await downloadCertifiedInstrumentPdf(request);
