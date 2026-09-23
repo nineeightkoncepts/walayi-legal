@@ -4,6 +4,8 @@ import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { provisionDailyRoom, isDailyConfigured, dailyDomain } from './api/_lib/dailyRoom';
+import { isAlgoliaConfigured, ALGOLIA_APP_ID, ALGOLIA_SEARCH_API_KEY, ALGOLIA_INDEX_NAME, upsertCommissionerRecord, removeCommissionerRecord } from './api/_lib/algoliaSync';
+import { verifyAdminIdToken } from './api/_lib/verifyFirebaseAdmin';
 
 dotenv.config();
 
@@ -565,6 +567,58 @@ app.post('/api/video/daily/room', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.warn('Daily.co room provisioning error:', error?.message);
     res.status(502).json({ error: 'Unable to provision Daily.co room', detail: error?.message });
+  }
+});
+
+// 9. Algolia Marketplace Search — mirrors api/search/*.ts (see those files
+// for the full explanation). Kept in sync manually since this Express
+// route and the Vercel serverless functions can't share a handler body
+// across their differing req/res types.
+app.get('/api/search/config', (req: Request, res: Response) => {
+  if (!isAlgoliaConfigured()) {
+    return res.status(200).json({ configured: false });
+  }
+  res.status(200).json({
+    configured: true,
+    appId: ALGOLIA_APP_ID,
+    searchApiKey: ALGOLIA_SEARCH_API_KEY,
+    indexName: ALGOLIA_INDEX_NAME
+  });
+});
+
+app.post('/api/search/sync-commissioner', async (req: Request, res: Response) => {
+  try {
+    if (!isAlgoliaConfigured()) {
+      return res.status(200).json({ synced: false, reason: 'ALGOLIA_NOT_CONFIGURED' });
+    }
+
+    const idToken = String(req.body?.idToken || '');
+    const adminEmail = await verifyAdminIdToken(idToken);
+    if (!adminEmail) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    const action = req.body?.action === 'remove' ? 'remove' : 'upsert';
+
+    if (action === 'remove') {
+      const objectID = String(req.body?.objectID || '');
+      if (!objectID) {
+        return res.status(400).json({ error: 'objectID is required' });
+      }
+      await removeCommissionerRecord(objectID);
+      return res.status(200).json({ synced: true });
+    }
+
+    const record = req.body?.record;
+    if (!record?.objectID || !record?.full_name) {
+      return res.status(400).json({ error: 'record.objectID and record.full_name are required' });
+    }
+
+    await upsertCommissionerRecord(record);
+    res.status(200).json({ synced: true });
+  } catch (error: any) {
+    console.error('Algolia sync error:', error?.stack || error?.message || error);
+    res.status(502).json({ error: 'Unable to sync search index', detail: error?.message || String(error) });
   }
 });
 

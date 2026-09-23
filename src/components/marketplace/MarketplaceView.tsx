@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { UserProfile, AuthorityType } from '../../types';
 import { 
@@ -24,6 +24,7 @@ import { ProfessionalProfileModal } from './ProfessionalProfileModal';
 import { UserAvatar } from '../common/UserAvatar';
 import { checkCommissionerConflict, ConflictCheckResult } from '../../utils/conflictValidation';
 import { isUserOnline, formatLastSeen } from '../../services/presenceService';
+import { searchCommissioners, isSearchAvailable } from '../../services/searchSyncService';
 
 export const MarketplaceView: React.FC = () => {
   const { 
@@ -39,6 +40,54 @@ export const MarketplaceView: React.FC = () => {
   const [onlyRemote, setOnlyRemote] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeProfileModalUser, setActiveProfileModalUser] = useState<UserProfile | null>(null);
+
+  // Algolia-backed name search (see docs/../WALAYI Incremental Algolia
+  // Search Integration concept note). null algoliaHitIds means "no active
+  // remote search result" — the existing client-side substring filter
+  // below is used instead, exactly as it always was, whenever Algolia
+  // isn't configured, hasn't returned yet, or a search request fails. This
+  // is what makes the whole thing fail gracefully: WALAYI's marketplace
+  // never depends on Algolia being up.
+  const [algoliaConfigured, setAlgoliaConfigured] = useState<boolean | null>(null);
+  const [algoliaHitIds, setAlgoliaHitIds] = useState<string[] | null>(null);
+  const [searchUnavailable, setSearchUnavailable] = useState(false);
+
+  useEffect(() => {
+    isSearchAvailable().then(setAlgoliaConfigured);
+  }, []);
+
+  useEffect(() => {
+    if (algoliaConfigured !== true) return;
+
+    const query = searchQuery.trim();
+    if (!query) {
+      setAlgoliaHitIds(null);
+      setSearchUnavailable(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      searchCommissioners(query).then((hits) => {
+        if (cancelled) return;
+        if (hits === null) {
+          // A stale/failed index must never look like "no such
+          // commissioner" — fall back to the plain client-side filter
+          // below instead of showing an empty result set.
+          setSearchUnavailable(true);
+          setAlgoliaHitIds(null);
+        } else {
+          setSearchUnavailable(false);
+          setAlgoliaHitIds(hits.map((h) => h.objectID));
+        }
+      });
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery, algoliaConfigured]);
 
   // Conflict warning modal state
   const [conflictModalData, setConflictModalData] = useState<{
@@ -78,14 +127,21 @@ export const MarketplaceView: React.FC = () => {
     if (onlyAvailableNow && !pro.availableNow) return false;
     if (onlyRemote && !pro.allowsRemote) return false;
 
-    // Search query
+    // Search query — prefer Algolia's typo-tolerant name match when it's
+    // actually configured and has answered for the current query; fall
+    // back to the original plain substring match otherwise (not
+    // configured, still loading, or the request failed).
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchName = pro.fullName.toLowerCase().includes(q);
-      const matchFirm = (pro.firmName || pro.lawFirmName)?.toLowerCase().includes(q);
-      const matchCourt = pro.court?.toLowerCase().includes(q);
-      const matchBio = pro.bio?.toLowerCase().includes(q);
-      if (!matchName && !matchFirm && !matchCourt && !matchBio) return false;
+      if (algoliaConfigured && algoliaHitIds !== null) {
+        if (!algoliaHitIds.includes(pro.id)) return false;
+      } else {
+        const q = searchQuery.toLowerCase();
+        const matchName = pro.fullName.toLowerCase().includes(q);
+        const matchFirm = (pro.firmName || pro.lawFirmName)?.toLowerCase().includes(q);
+        const matchCourt = pro.court?.toLowerCase().includes(q);
+        const matchBio = pro.bio?.toLowerCase().includes(q);
+        if (!matchName && !matchFirm && !matchCourt && !matchBio) return false;
+      }
     }
 
     return true;
@@ -149,12 +205,18 @@ export const MarketplaceView: React.FC = () => {
           <Search className="w-5 h-5 text-slate-400 absolute left-4 top-3.5" />
           <input
             type="text"
-            placeholder="Search by Name, City, Firm or Court..."
+            placeholder="Search Commissioner by name, city, firm or court..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-12 pr-4 py-4 rounded-2xl bg-slate-50 border border-slate-100 text-slate-900 placeholder-slate-400 text-sm font-bold focus:outline-none focus:border-[#0097A7] focus:ring-2 focus:ring-[#0097A7]/10 transition-all"
             id="input-marketplace-search"
           />
+          {searchUnavailable && (
+            <p className="mt-2 text-[11px] font-semibold text-amber-700 flex items-center gap-1.5" id="marketplace-search-unavailable-notice">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              Search temporarily unavailable — showing basic name matching instead.
+            </p>
+          )}
         </div>
       </div>
 
@@ -162,7 +224,9 @@ export const MarketplaceView: React.FC = () => {
       <div className="space-y-4">
         {sortedFiltered.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-3xl border border-slate-100 text-slate-400 text-sm italic">
-            No commissioners found matching your search.
+            {searchQuery.trim()
+              ? 'No Commissioner found for that search. Try another spelling or search by surname.'
+              : 'No commissioners found matching your search.'}
           </div>
         ) : (
           sortedFiltered.map((pro) => {

@@ -41,6 +41,7 @@ import { auth, fbSignOut, onAuthStateChanged, db, sendSignInLinkToEmail } from '
 import { doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, onSnapshot, collection, query as fsQuery, where, getDocs } from 'firebase/firestore';
 import { getStoredProfilePhoto } from '../services/profilePhotoService';
 import { isSuperAdminEmail, isCommissionerLike, sanitizeEmailForId } from '../services/roleService';
+import { syncCommissionerToSearch, removeCommissionerFromSearch } from '../services/searchSyncService';
 import { PRESENCE_HEARTBEAT_INTERVAL_MS } from '../services/presenceService';
 
 export type AppView = 
@@ -123,7 +124,7 @@ interface AppContextType {
   setMasterAdminSection: (section: MasterAdminSection) => void;
   setDeviceMode: (mode: 'desktop' | 'mobile' | 'tablet') => void;
   switchUser: (userId: string) => void;
-  updateCurrentUser: (updates: Partial<UserProfile>) => void;
+  updateCurrentUser: (updates: Partial<UserProfile>) => Promise<boolean>;
   signOutUser: () => Promise<void>;
   signInUser: (profileUpdates?: Partial<UserProfile>) => void;
   setActiveCommissioningId: (id: string | null) => void;
@@ -1143,26 +1144,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // role/professionalCategory straight from Firestore) had nothing
   // commissioner-like to find, and they silently never appeared on the
   // marketplace.
-  const updateCurrentUser = (updates: Partial<UserProfile>) => {
+  // Returns whether the Firestore write actually succeeded — a fire-and-
+  // forget void return here is exactly how the Authority Onboarding
+  // persistence bug went unnoticed before: the UI showed "submitted"
+  // regardless of whether anything actually reached the database. Callers
+  // that MUST know (like onboarding) can now await this and react to a
+  // real failure instead of only a best-effort toast.
+  const updateCurrentUser = (updates: Partial<UserProfile>): Promise<boolean> => {
+    const targetId = currentUser.id;
+
     setCurrentUser(prev => {
       const updated = { ...prev, ...updates };
       setUsers(all => all.map(u => u.id === prev.id ? updated : u));
-
-      if (prev.id && prev.id !== 'guest-deponent') {
-        setDoc(doc(db, 'users', prev.id), {
-          ...updates,
-          updatedAt: new Date().toISOString()
-        }, { merge: true }).catch((err) => {
-          console.error('Firestore profile update failed:', err);
-          addNotification(
-            'Profile Sync Failed',
-            `Some profile changes could not be saved to your account. Reason: ${err?.message || 'unknown error'}. Try again, or refresh — otherwise this change will be lost.`,
-            'SYSTEM'
-          );
-        });
-      }
-
       return updated;
+    });
+
+    if (!targetId || targetId === 'guest-deponent') {
+      return Promise.resolve(true);
+    }
+
+    const mergedForSync = { ...currentUser, ...updates };
+
+    return setDoc(doc(db, 'users', targetId), {
+      ...updates,
+      updatedAt: new Date().toISOString()
+    }, { merge: true }).then(() => {
+      // Keep the search index current when an already-admitted
+      // commissioner edits their own public profile (name, city, fee,
+      // etc.) — best-effort, never blocks the profile save itself.
+      if (isCommissionerLike(mergedForSync.role) && mergedForSync.admissionStatus === 'ADMITTED' && auth.currentUser) {
+        auth.currentUser.getIdToken()
+          .then((idToken) => syncCommissionerToSearch(idToken, mergedForSync))
+          .catch(() => {});
+      }
+      return true;
+    }).catch((err) => {
+      console.error('Firestore profile update failed:', err);
+      addNotification(
+        'Profile Sync Failed',
+        `Some profile changes could not be saved to your account. Reason: ${err?.message || 'unknown error'}. Try again, or refresh — otherwise this change will be lost.`,
+        'SYSTEM'
+      );
+      return false;
     });
   };
 
@@ -1349,6 +1372,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       admissionDecisionAt: decisionAt,
       admissionDecisionBy: currentUser.email,
       admissionDecisionReason: reason || null,
+    }).then(() => {
+      // Only sync the search index once the real, authoritative Firestore
+      // decision has actually persisted — Algolia mirrors Firestore, never
+      // the other way around. Best-effort: search sync unavailable/failing
+      // never blocks or reverts the admission decision itself.
+      if (!auth.currentUser) return;
+      return auth.currentUser.getIdToken().then((idToken) => {
+        if (status === 'ADMITTED' && userObj) {
+          return syncCommissionerToSearch(idToken, { ...userObj, admissionStatus: status });
+        }
+        return removeCommissionerFromSearch(idToken, userId);
+      });
     }).catch((err) => console.warn('Commissioner admission notice:', err?.message));
 
     logAdminAction({

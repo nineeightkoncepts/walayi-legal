@@ -45,9 +45,13 @@ export const AuthorityOnboardingModal: React.FC = () => {
   const [uploadedPC, setUploadedPC] = useState<string>('Practising_Certificate_2026_LawCouncil.pdf');
   const [uploadedWarrant, setUploadedWarrant] = useState<string>('Chief_Justice_CFO_Commission_Warrant.pdf');
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
+    setIsSubmitting(true);
 
     let basis: LegalBasis = 'COMMISSIONER_ACT_CAP_5';
     if (selectedAuthority === 'notary_public') basis = 'NOTARIES_PUBLIC_ACT';
@@ -111,7 +115,7 @@ export const AuthorityOnboardingModal: React.FC = () => {
       selectedAuthority === 'notary_public' ? 'notary_public' :
       selectedAuthority === 'justice_of_the_peace' ? 'justice_of_the_peace' : 'advocate';
 
-    updateCurrentUser({
+    const persisted = await updateCurrentUser({
       fullName,
       lawFirmName: isJudicial ? undefined : (lawFirmName || undefined),
       firmName: isJudicial ? null : (lawFirmName || null),
@@ -125,6 +129,11 @@ export const AuthorityOnboardingModal: React.FC = () => {
       role: selectedAuthority === 'commissioner_for_oaths' ? 'commissioner' :
             selectedAuthority === 'notary_public' ? 'notary' :
             selectedAuthority === 'judicial_officer' ? 'judicial_officer' : 'justice_of_peace',
+      // Re-entering PENDING here (rather than leaving whatever it was)
+      // matters if this account was previously REJECTED/SUSPENDED and is
+      // now re-declaring a fresh authority — it belongs back in the
+      // Master Admin's review queue, not stuck in its old decision.
+      admissionStatus: 'PENDING',
       authorities: [
         ...currentUser.authorities,
         {
@@ -138,6 +147,17 @@ export const AuthorityOnboardingModal: React.FC = () => {
         }
       ]
     });
+
+    setIsSubmitting(false);
+
+    if (!persisted) {
+      // updateCurrentUser already surfaced a notification with the reason —
+      // this inline error keeps the person from believing they're done
+      // (and heading off to wait for an admission decision that will never
+      // come) when the write to their account actually failed.
+      setSubmitError('This could not be saved to your account. Please check your connection and try submitting again — do not assume you\'re registered until this succeeds.');
+      return;
+    }
 
     setIsSubmitted(true);
   };
@@ -408,6 +428,13 @@ export const AuthorityOnboardingModal: React.FC = () => {
               </div>
             )}
 
+            {submitError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{submitError}</span>
+              </div>
+            )}
+
             <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
               <button
                 type="button"
@@ -419,11 +446,12 @@ export const AuthorityOnboardingModal: React.FC = () => {
 
               <button
                 type="submit"
-                className="px-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-xs cursor-pointer transition-colors"
+                disabled={isSubmitting}
+                className="px-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-xs cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 id="btn-submit-authority-application"
               >
                 <ShieldCheck className="w-4 h-4" />
-                Submit Credentials For Compliance Review
+                {isSubmitting ? 'Saving…' : 'Submit Credentials For Compliance Review'}
               </button>
             </div>
 
