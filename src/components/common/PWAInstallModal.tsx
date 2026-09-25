@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import {
   Download,
   Apple,
@@ -25,7 +26,12 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({ isOpen, onClos
 
   if (!isOpen) return null;
 
-  return (
+  // Portalled to document.body — this modal is triggered from PWAInstallButton,
+  // which is itself rendered inside Navbar's `position: sticky` header (a CSS
+  // stacking context). A `fixed` modal left as that header's descendant gets
+  // capped inside that context regardless of its own z-index, so it can end
+  // up painted underneath other page content instead of on top of it.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn overflow-y-auto"
       id="pwa-install-modal-root"
@@ -136,6 +142,7 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({ isOpen, onClos
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

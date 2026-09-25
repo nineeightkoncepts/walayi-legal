@@ -81,8 +81,15 @@ export const Navbar: React.FC = () => {
   const [quickVerifyQuery, setQuickVerifyQuery] = useState('');
 
   const profilePanelRef = useRef<HTMLDivElement>(null);
+  const profileDropdownContentRef = useRef<HTMLDivElement>(null);
   const notifPanelRef = useRef<HTMLDivElement>(null);
+  const notifDropdownContentRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Screen coordinates for the portaled dropdowns (see below) — null while
+  // closed. Computed from the trigger button at open time; the header is
+  // `position: sticky` so it doesn't move on page scroll, only resize.
+  const [profileDropdownPos, setProfileDropdownPos] = useState<{ top: number; right: number } | null>(null);
+  const [notifDropdownPos, setNotifDropdownPos] = useState<{ top: number; right: number } | null>(null);
 
   // Navigate to the dedicated sign in / sign up / forgot password page
   const goToAuth = (mode: 'signin' | 'signup' | 'forgot-password') => {
@@ -93,10 +100,15 @@ export const Navbar: React.FC = () => {
   const unreadNotifs = notifications.filter(n => !n.read);
   const activeCeremony = requests.find(r => r.status === 'CEREMONY_ACTIVE' || r.status === 'ACCEPTED');
 
-  // Close profile dropdown when clicking outside
+  // Close profile dropdown when clicking outside (the trigger button OR the
+  // portaled panel content — the panel is no longer a DOM descendant of
+  // profilePanelRef once portaled, so it needs its own ref checked here too).
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (profilePanelRef.current && !profilePanelRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const insideTrigger = profilePanelRef.current?.contains(target);
+      const insideDropdown = profileDropdownContentRef.current?.contains(target);
+      if (!insideTrigger && !insideDropdown) {
         setShowProfilePanel(false);
       }
     };
@@ -106,10 +118,33 @@ export const Navbar: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showProfilePanel]);
 
-  // Close notifications dropdown when clicking outside
+  // Keep the portaled dropdown anchored under its trigger button — recompute
+  // whenever it opens, and on resize while it's open (the sticky header
+  // doesn't move on scroll, so scroll alone never needs a recompute here).
+  useEffect(() => {
+    const computePosition = () => {
+      const btn = profilePanelRef.current?.querySelector('#btn-open-user-profile-modal');
+      if (!btn) return;
+      const rect = btn.getBoundingClientRect();
+      setProfileDropdownPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+    };
+
+    if (showProfilePanel) {
+      computePosition();
+      window.addEventListener('resize', computePosition);
+      return () => window.removeEventListener('resize', computePosition);
+    }
+    setProfileDropdownPos(null);
+  }, [showProfilePanel]);
+
+  // Close notifications dropdown when clicking outside (trigger OR the
+  // portaled panel content — see the matching profile-dropdown comment).
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (notifPanelRef.current && !notifPanelRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const insideTrigger = notifPanelRef.current?.contains(target);
+      const insideDropdown = notifDropdownContentRef.current?.contains(target);
+      if (!insideTrigger && !insideDropdown) {
         setShowNotifMenu(false);
       }
     };
@@ -117,6 +152,23 @@ export const Navbar: React.FC = () => {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showNotifMenu]);
+
+  // Keep the portaled notifications dropdown anchored under its bell icon.
+  useEffect(() => {
+    const computePosition = () => {
+      const btn = notifPanelRef.current?.querySelector('#btn-notification-bell');
+      if (!btn) return;
+      const rect = btn.getBoundingClientRect();
+      setNotifDropdownPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+    };
+
+    if (showNotifMenu) {
+      computePosition();
+      window.addEventListener('resize', computePosition);
+      return () => window.removeEventListener('resize', computePosition);
+    }
+    setNotifDropdownPos(null);
   }, [showNotifMenu]);
 
   // Handle Photo Upload directly from the Profile Panel
@@ -247,9 +299,11 @@ export const Navbar: React.FC = () => {
                   )}
                 </button>
 
-                {showNotifMenu && (
+                {showNotifMenu && notifDropdownPos && createPortal(
                   <div
-                    className="absolute right-0 mt-2 w-80 max-w-[90vw] bg-white border border-slate-200 rounded-3xl shadow-2xl z-50 animate-scaleUp text-slate-900 overflow-hidden"
+                    ref={notifDropdownContentRef}
+                    className="fixed w-80 max-w-[90vw] bg-white border border-slate-200 rounded-3xl shadow-2xl z-50 animate-scaleUp text-slate-900 overflow-hidden"
+                    style={{ top: notifDropdownPos.top, right: notifDropdownPos.right }}
                     id="notifications-dropdown-panel"
                   >
                     <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
@@ -303,7 +357,8 @@ export const Navbar: React.FC = () => {
                         ))
                       )}
                     </div>
-                  </div>
+                  </div>,
+                  document.body
                 )}
               </div>
             )}
@@ -329,10 +384,18 @@ export const Navbar: React.FC = () => {
                 <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${showProfilePanel ? 'rotate-180' : ''}`} />
               </button>
 
-              {/* Embedded Profile Panel right beneath it */}
-              {showProfilePanel && (
-                <div 
-                  className="absolute right-0 mt-2 w-72 sm:w-80 bg-white border border-slate-200 rounded-3xl shadow-2xl p-5 z-50 animate-scaleUp text-slate-900"
+              {/* Embedded Profile Panel right beneath it — portalled to
+                  document.body (see profileDropdownPos above) for the same
+                  reason every other Navbar-triggered overlay is: this
+                  header is `position: sticky` with a z-index, which makes
+                  it a CSS stacking context, so a plain `absolute`/`fixed`
+                  descendant here can end up painted underneath other page
+                  content no matter its own z-index. */}
+              {showProfilePanel && profileDropdownPos && createPortal(
+                <div
+                  ref={profileDropdownContentRef}
+                  className="fixed w-72 sm:w-80 bg-white border border-slate-200 rounded-3xl shadow-2xl p-5 z-50 animate-scaleUp text-slate-900"
+                  style={{ top: profileDropdownPos.top, right: profileDropdownPos.right }}
                   id="profile-dropdown-panel"
                 >
                   {!isSignedIn ? (
@@ -469,7 +532,8 @@ export const Navbar: React.FC = () => {
                       </div>
                     </div>
                   )}
-                </div>
+                </div>,
+                document.body
               )}
             </div>
 

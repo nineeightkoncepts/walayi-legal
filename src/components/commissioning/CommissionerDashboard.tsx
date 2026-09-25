@@ -51,8 +51,15 @@ export const CommissionerDashboard: React.FC = () => {
   const [showApiConfigModal, setShowApiConfigModal] = useState(false);
   const [simulatingPayment, setSimulatingPayment] = useState(false);
 
+  // Requests actually assigned to this commissioner — a defensive filter
+  // on top of the context's own per-user Firestore query, since `requests`
+  // is cached under one browser-wide (not per-account) localStorage key
+  // and could otherwise show a stale/different account's data for a
+  // moment on a shared or multi-account test device.
+  const myRequests = requests.filter(r => r.commissionerId === currentUser.id);
+
   // Filter tasks
-  const pendingTasks = requests.filter(req => {
+  const pendingTasks = myRequests.filter(req => {
     // Match search query
     const matchSearch = req.documentTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
                         req.deponentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -66,9 +73,9 @@ export const CommissionerDashboard: React.FC = () => {
   });
 
   // Calculate summary counts
-  const totalTasksCount = requests.length;
-  const activePendingCount = requests.filter(r => r.status !== 'COMPLETED' && r.status !== 'CANCELLED').length;
-  const totalEscrowedUGX = requests
+  const totalTasksCount = myRequests.length;
+  const activePendingCount = myRequests.filter(r => r.status !== 'COMPLETED' && r.status !== 'CANCELLED').length;
+  const totalEscrowedUGX = myRequests
     .filter(r => r.paymentStatus === 'ESCROWED' || r.paymentStatus === 'RELEASED')
     .reduce((sum, r) => sum + r.serviceFeeUGX, 0);
 
@@ -250,7 +257,7 @@ export const CommissionerDashboard: React.FC = () => {
           </div>
           <div>
             <div className="text-2xl font-bold text-slate-900 leading-tight">
-              {requests.filter(r => r.status === 'COMPLETED').length}
+              {myRequests.filter(r => r.status === 'COMPLETED').length}
             </div>
             <div className="text-xs text-slate-500 font-medium">Completed Oaths</div>
           </div>

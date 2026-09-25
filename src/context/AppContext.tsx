@@ -208,24 +208,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // onAuthStateChanged listener below fills in the real profile moments
   // after mount — the app never guesses or assumes an identity up front.
   const [currentUser, setCurrentUser] = useState<UserProfile>(createGuestUser);
+  // Never seeded with INITIAL_REQUESTS (demo/mock data) — a real signed-in
+  // user's requests come exclusively from Firestore (see the per-user
+  // listener below), and every real view requires signing in anyway, so
+  // there's no legitimate scenario where mock requests should appear.
+  // Seeding them here used to mean every brand-new commissioner's own
+  // dashboard permanently showed a fake completed request (and its fake
+  // escrowed fee) that was never really theirs — the merge-only sync
+  // listener had no way to ever tell it wasn't real and remove it.
   const [requests, setRequests] = useState<CommissioningRequest[]>(() => {
+    const mockIds = new Set(INITIAL_REQUESTS.map(r => r.id));
     try {
       const saved = localStorage.getItem('walayi_commissioning_requests');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const map = new Map<string, CommissioningRequest>();
-          parsed.forEach((r: CommissioningRequest) => map.set(r.id, r));
-          INITIAL_REQUESTS.forEach(r => {
-            if (!map.has(r.id)) map.set(r.id, r);
-          });
-          return Array.from(map.values());
+        if (Array.isArray(parsed)) {
+          // Also strips a mock entry an already-affected browser has sitting
+          // in its cache from before this fix, not just future sessions.
+          return parsed.filter((r: CommissioningRequest) => !mockIds.has(r.id));
         }
       }
     } catch (e) {
       console.warn('Failed to parse cached commissioning requests', e);
     }
-    return INITIAL_REQUESTS;
+    return [];
   });
   const [credentialDocs, setCredentialDocs] = useState<Record<string, CredentialDocument[]>>(INITIAL_CREDENTIAL_DOCS);
   const [policyRules, setPolicyRules] = useState<LegalPolicyRule[]>(INITIAL_LEGAL_POLICY_RULES);
