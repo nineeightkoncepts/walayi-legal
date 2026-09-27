@@ -82,7 +82,8 @@ const NotificationToasts: React.FC = () => {
 };
 
 const MainContent: React.FC = () => {
-  const { currentView, setCurrentView, isMasterAdmin, currentUser } = useApp();
+  const { currentView, setCurrentView, isMasterAdmin, currentUser, requests, activeCommissioningId } = useApp();
+  const hasActiveRequest = requests.some(r => r.id === activeCommissioningId);
 
   // Role-based access guard. Rather than blocking with an "Access Denied"
   // screen, silently steer the user to a view their role can actually open.
@@ -113,7 +114,23 @@ const MainContent: React.FC = () => {
         {currentView === 'home' && <HomeView />}
         {currentView === 'marketplace' && <MarketplaceView />}
         {currentView === 'new-commissioning' && <NewCommissioningModal />}
-        {currentView === 'room' && <DailyCommissioningRoom />}
+        {currentView === 'room' && (
+          hasActiveRequest ? <DailyCommissioningRoom /> : (
+            <div className="max-w-lg mx-auto my-10 p-8 rounded-3xl bg-white border border-slate-200 shadow-sm text-center space-y-3" id="no-active-commissioning-room">
+              <h2 className="text-base font-display-legal font-bold text-[#0D1B3D]">No Commissioning Selected</h2>
+              <p className="text-xs text-slate-500">
+                Open a commissioning request from your dashboard or documents list to enter its chamber.
+              </p>
+              <button
+                type="button"
+                onClick={() => setCurrentView(isMasterAdmin ? 'admin' : 'documents')}
+                className="px-4 py-2 rounded-xl bg-[#0D1B3D] hover:bg-slate-800 text-white font-bold text-xs cursor-pointer transition-colors"
+              >
+                Go to My Documents
+              </button>
+            </div>
+          )
+        )}
         {currentView === 'documents' && <DocumentsView />}
         {currentView === 'commissioner-dashboard' && <CommissionerDashboard />}
         {currentView === 'commissioner-settings' && <CommissionerSettings />}

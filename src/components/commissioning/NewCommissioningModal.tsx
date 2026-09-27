@@ -61,6 +61,7 @@ export const NewCommissioningModal: React.FC = () => {
     createCommissioningRequest,
     updateCommissioningRequest,
     executePayment,
+    recordTransaction,
     setActiveCommissioningId,
     setCurrentView,
     platformFeePercentage,
@@ -1479,6 +1480,7 @@ export const NewCommissioningModal: React.FC = () => {
             documentTitle={documentTitle || 'Statutory Affidavit'}
             commissionerName={activePro?.fullName}
             onPaymentSuccess={(txn, feeRef) => {
+              recordTransaction(txn);
               handleCreateAndPay(txn, feeRef);
             }}
             onCancel={() => setStep(2)}

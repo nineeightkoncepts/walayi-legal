@@ -141,6 +141,10 @@ interface AppContextType {
     commissioningId?: string;
     purpose: 'COMMISSIONING_ESCROW' | 'PRO_SUBSCRIPTION' | 'PAYOUT_WITHDRAWAL';
   }) => Promise<PaymentTransaction>;
+  // Persists an already-confirmed transaction (e.g. from the real ioTec
+  // collect+poll flow in PlatformFeeSheet) — see the implementation for why
+  // this exists separately from executePayment.
+  recordTransaction: (txn: PaymentTransaction) => void;
   subscribePro: (planName: 'Standard' | 'Pro Advocate' | 'Chambers Premier') => void;
   updateLegalPolicy: (rule: LegalPolicyRule) => void;
   setPlatformFee: (percentage: number) => void;
@@ -239,7 +243,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [operatingView, setOperatingView] = useState<OperatingView>('USER');
   const [masterAdminSection, setMasterAdminSection] = useState<MasterAdminSection>('OVERVIEW');
   const [activeCommissioningId, setActiveCommissioningId] = useState<string | null>(() => {
-    return localStorage.getItem('walayi_active_commissioning_id') || 'req-002';
+    return localStorage.getItem('walayi_active_commissioning_id') || null;
   });
   // Documents a user has started uploading/configuring but not yet
   // submitted to a Commissioner — see the live drafts listener below.
@@ -728,6 +732,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (unsub) unsub();
     };
   }, [isSignedIn, isMasterAdmin]);
+
+  // ---------------------------------------------------------------------------
+  // Payment transactions. Previously local-state-only (created via
+  // executePayment's setTransactions, never written to Firestore) —
+  // meaning a Master Admin's "platform transactions"/"platform revenue"
+  // view (WALAYI Operating Blueprint §25) could only ever show whatever
+  // happened to occur in the admin's own browser tab, never a real
+  // cross-device picture of platform activity. A Master Admin now streams
+  // every transaction; an ordinary user streams only their own.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!isSignedIn || !currentUser.id || currentUser.id === 'guest-deponent') return;
+
+    const q = isMasterAdmin
+      ? fsQuery(collection(db, 'transactions'))
+      : fsQuery(collection(db, 'transactions'), where('userId', '==', currentUser.id));
+
+    let unsub: (() => void) | undefined;
+    try {
+      unsub = onSnapshot(q, (snap) => {
+        const remote: PaymentTransaction[] = [];
+        snap.forEach((d) => remote.push(d.data() as PaymentTransaction));
+        remote.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        setTransactions(remote);
+      }, (err) => console.warn('Transactions listener notice:', err?.message));
+    } catch (e) {
+      console.warn('Could not attach transactions listener', e);
+    }
+
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [isSignedIn, currentUser.id, isMasterAdmin]);
 
   // ---------------------------------------------------------------------------
   // Presence heartbeat.
@@ -1889,6 +1926,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  // Persists a real, already-confirmed transaction — to local state
+  // immediately, and to Firestore so it survives a refresh and is actually
+  // visible cross-device (in particular, to the Master Admin's platform
+  // transactions/revenue views, which previously could only ever show
+  // whatever happened to occur in that admin's own browser tab).
+  const recordTransaction = (txn: PaymentTransaction) => {
+    setTransactions(prev => (prev.some(t => t.id === txn.id) ? prev : [txn, ...prev]));
+    setDoc(doc(db, 'transactions', txn.id), txn).catch((err) => {
+      console.warn('Transaction persistence notice:', err?.message);
+    });
+  };
+
   const executePayment = async (params: {
     serviceFeeUGX: number;
     provider: 'MTN_MOMO' | 'AIRTEL_MONEY' | 'WALLET';
@@ -1907,7 +1956,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       purpose: params.purpose
     });
 
-    setTransactions(prev => [txn, ...prev]);
+    recordTransaction(txn);
     return txn;
   };
 
@@ -2151,6 +2200,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updateCommissioningRequest,
       advanceCeremonyState,
       executePayment,
+      recordTransaction,
       subscribePro,
       updateLegalPolicy,
       setPlatformFee,

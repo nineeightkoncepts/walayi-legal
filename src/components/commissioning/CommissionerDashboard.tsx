@@ -38,7 +38,7 @@ export const CommissionerDashboard: React.FC = () => {
     setActiveCommissioningId, 
     setCurrentView,
     updateCommissioningRequest,
-    executePayment,
+    notifyUser,
     addNotification
   } = useApp();
 
@@ -89,43 +89,34 @@ export const CommissionerDashboard: React.FC = () => {
     setActiveCommissioningId(task.id);
   };
 
-  // Helper to simulate instant deponent mobile money payment if task is unpaid
-  const handleSimulateDeponentPayment = async (task: CommissioningRequest) => {
+  // A Commissioner has no legitimate way to confirm the DEPONENT's payment
+  // themselves — WALAYI Operating Blueprint §10 is explicit that a payment
+  // being initiated is never itself proof of a successful payment, and
+  // this dashboard previously had a button that let the commissioner
+  // unilaterally mark a client's escrow as paid with a single click,
+  // completely bypassing the deponent's own real mobile money confirmation.
+  // The only legitimate action available here is nudging the deponent to
+  // go complete it themselves; the gate then lifts on its own once the
+  // deponent's real payment (via PlatformFeeSheet, verified against ioTec)
+  // syncs paymentStatus to ESCROWED for both parties.
+  const handleSendPaymentReminder = (task: CommissioningRequest) => {
     setSimulatingPayment(true);
     try {
-      await executePayment({
-        serviceFeeUGX: task.serviceFeeUGX,
-        provider: 'MTN_MOMO',
-        phoneNumber: task.deponentPhone || '+256772000000',
-        commissioningId: task.id,
-        purpose: 'COMMISSIONING_ESCROW'
-      });
-
-      updateCommissioningRequest(task.id, {
-        paymentStatus: 'ESCROWED',
-        paymentMethod: 'MTN_MOMO',
-        paymentReference: `MTN-UG-${Math.floor(10000000 + Math.random() * 90000000)}`,
-        status: 'PAID'
-      }, {
-        eventType: 'PAYMENT_ESCROWED',
-        details: `Deponent confirmed payment of UGX ${task.totalAmountUGX.toLocaleString()} via MTN Mobile Money.`
-      });
-
-      // Update selected task in state
-      setSelectedTask(prev => prev ? {
-        ...prev,
-        paymentStatus: 'ESCROWED',
-        paymentMethod: 'MTN_MOMO',
-        status: 'PAID'
-      } : null);
-
+      if (task.deponentUserId) {
+        notifyUser(
+          task.deponentUserId,
+          'Payment Reminder',
+          `${currentUser.fullName} is waiting for you to complete the UGX ${task.totalAmountUGX.toLocaleString()} escrow payment for "${task.documentTitle}" before the commissioning room can open.`,
+          'PAYMENT',
+          task.id,
+          'commissioningRequest'
+        );
+      }
       addNotification(
-        'Payment Escrow Confirmed',
-        `UGX ${task.totalAmountUGX.toLocaleString()} received via MTN MoMo for ${task.documentTitle}.`,
-        'PAYMENT'
+        'Reminder Sent',
+        `${task.deponentName} has been notified to complete the outstanding payment.`,
+        'SYSTEM'
       );
-    } catch (e) {
-      console.error(e);
     } finally {
       setSimulatingPayment(false);
     }
@@ -358,8 +349,11 @@ export const CommissionerDashboard: React.FC = () => {
               const hasAnnexures = (task.annexures && task.annexures.length > 0) || task.hasAnnexures;
               const annexureCount = task.annexures ? task.annexures.length : (task.hasAnnexures ? 2 : 0);
 
-              // Simulated real-time online status check for deponent
-              const isDeponentOnline = task.id === 'req-002' || task.status === 'ACCEPTED' || task.status === 'PAID';
+              // Real presence — set by the deponent's own device while
+              // they're actually inside the commissioning room (see
+              // DailyCommissioningRoom's presence effect), not a stand-in
+              // based on the request's status.
+              const isDeponentOnline = !!task.deponentPresent;
 
               return (
                 <div 
@@ -727,13 +721,13 @@ export const CommissionerDashboard: React.FC = () => {
                         </p>
                         <button
                           type="button"
-                          onClick={() => handleSimulateDeponentPayment(selectedTask)}
+                          onClick={() => handleSendPaymentReminder(selectedTask)}
                           disabled={simulatingPayment}
                           className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                          id="btn-simulate-deponent-payment"
+                          id="btn-remind-deponent-payment"
                         >
                           <Smartphone className="w-3.5 h-3.5" />
-                          {simulatingPayment ? 'Processing MoMo Escrow...' : 'Simulate Client MTN MoMo Payment'}
+                          {simulatingPayment ? 'Sending…' : 'Remind Deponent to Pay'}
                         </button>
                       </div>
                     )}
@@ -833,12 +827,13 @@ export const CommissionerDashboard: React.FC = () => {
                       </p>
                       <button
                         type="button"
-                        onClick={() => handleSimulateDeponentPayment(selectedTask)}
+                        onClick={() => handleSendPaymentReminder(selectedTask)}
+                        disabled={simulatingPayment}
                         className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold inline-flex items-center gap-2 transition-colors cursor-pointer"
-                        id="btn-gate-resolve-payment"
+                        id="btn-gate-remind-payment"
                       >
                         <Smartphone className="w-4 h-4" />
-                        Complete MTN MoMo Escrow Payment
+                        {simulatingPayment ? 'Sending…' : 'Remind Deponent to Pay'}
                       </button>
                     </div>
                   ) : (

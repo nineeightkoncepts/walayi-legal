@@ -62,18 +62,24 @@ export const DailyCommissioningRoom: React.FC = () => {
     currentUser, 
     requests, 
     activeCommissioningId, 
-    updateCommissioningRequest, 
+    updateCommissioningRequest,
     advanceCeremonyState,
     setCurrentView,
     executePayment,
+    recordTransaction,
     addNotification
   } = useApp();
 
-  const activeRequest = requests.find(r => r.id === activeCommissioningId) || requests[0];
+  // Guaranteed by the caller (App.tsx only renders this view once it's
+  // confirmed a matching request actually exists — see the guard there),
+  // never falls back to requests[0]: that used to silently "work" only
+  // because mock seed data guaranteed a request always existed, and would
+  // otherwise land someone on an arbitrary, possibly unrelated request.
+  const activeRequest = requests.find(r => r.id === activeCommissioningId)!;
 
-  const isCommissioner = currentUser.role === 'commissioner' || 
-                        currentUser.role === 'notary' || 
-                        currentUser.role === 'judicial_officer' || 
+  const isCommissioner = currentUser.role === 'commissioner' ||
+                        currentUser.role === 'notary' ||
+                        currentUser.role === 'judicial_officer' ||
                         currentUser.role === 'justice_of_peace' ||
                         currentUser.role === 'super_admin' ||
                         currentUser.role === 'master_admin';
@@ -391,6 +397,33 @@ export const DailyCommissioningRoom: React.FC = () => {
         }
       });
     } else if (stepNumber === 14) {
+      // WALAYI Operating Blueprint §19: "WALAYI completes the transaction
+      // only after the required preceding stages have successfully
+      // occurred. An incomplete or failed transaction must never be
+      // presented as successfully commissioned." The UI's own step
+      // sequencing normally prevents reaching FINALISE early, but that's a
+      // presentation-layer guarantee, not a logic-layer one — this is the
+      // actual enforcement point, checked against real captured data
+      // rather than trusting whatever step number was passed in.
+      const hasDeponentMark = !!(deponentSignData || deponentThumbData || activeRequest.deponentSignatureDataUrl || activeRequest.deponentThumbprintDataUrl);
+      const hasCommissionerSignature = !!(commissionerSignData || activeRequest.commissionerSignatureDataUrl);
+      const hasSeal = sealApplied || !!activeRequest.commissionerSealSerial;
+
+      if (!hasDeponentMark || !hasCommissionerSignature || !hasSeal) {
+        const missing = [
+          !hasDeponentMark && 'the deponent\'s signature/thumbprint',
+          !hasCommissionerSignature && 'the commissioner\'s signature',
+          !hasSeal && 'the official seal',
+        ].filter(Boolean).join(', ');
+        addNotification(
+          'Cannot Finalise — Ceremony Incomplete',
+          `This instrument cannot be finalised because ${missing} ${missing.includes(',') ? 'have' : 'has'} not been captured. Complete every statutory step before finalising.`,
+          'ALERT'
+        );
+        setCeremonyStep(11);
+        return;
+      }
+
       // Complete the ceremony and record the commissioner net payout.
       // Settlement to the commissioner is handled off-platform.
       const netPayout = activeRequest.serviceFeeUGX;
@@ -747,6 +780,7 @@ export const DailyCommissioningRoom: React.FC = () => {
           documentTitle={activeRequest.documentTitle}
           commissionerName={activeRequest.assignedProfessionalName}
           onPaymentSuccess={(txn, feeRef) => {
+            recordTransaction(txn);
             updateCommissioningRequest(activeRequest.id, {
               paymentStatus: 'ESCROWED',
               paymentMethod: txn.provider,

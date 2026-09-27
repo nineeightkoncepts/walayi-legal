@@ -66,15 +66,13 @@ export const VerificationPortal: React.FC = () => {
       if (code) {
         setQuery(code);
         performVerification(code);
-      } else if (!hasSearched && requests.length > 0) {
-        // Default to the first completed or available document for showcase
-        const sample = requests.find(r => r.status === 'COMPLETED' || r.securityNumber === 'WY-8849KPLA') || requests[0];
-        if (sample) {
-          const defaultCode = sample.securityNumber || sample.certificateNumber;
-          setQuery(defaultCode);
-          performVerification(defaultCode);
-        }
       }
+      // No "showcase sample" auto-lookup on plain page load: this is the
+      // PUBLIC verification tool, and `requests` is a signed-in visitor's
+      // OWN commissioning history — silently running a "verification" of
+      // whatever their own most recent case happens to be (finished or
+      // not) on an unrelated page visit is confusing at best and could
+      // read as a real result for a document they never asked about.
     };
 
     parseUrlCode();
@@ -201,26 +199,7 @@ export const VerificationPortal: React.FC = () => {
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 px-2">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-medium text-slate-400">Quick Test Samples:</span>
-            <button
-              type="button"
-              onClick={() => handleQuickLookup('WY-8849KPLA')}
-              className="px-2 py-0.5 rounded bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 font-mono-code font-bold cursor-pointer transition-colors"
-              id="chip-sample-security-no"
-            >
-              WY-8849KPLA
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickLookup('WAL-UG-2026-8849')}
-              className="px-2 py-0.5 rounded bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 font-mono-code font-bold cursor-pointer transition-colors"
-              id="chip-sample-cert-id"
-            >
-              WAL-UG-2026-8849
-            </button>
-          </div>
+        <div className="flex items-center justify-end gap-2 text-[11px] text-slate-500 px-2">
           <span className="text-[10px] text-slate-400 italic">WALAYI's own independent system-of-record</span>
         </div>
       </form>
@@ -518,17 +497,6 @@ export const VerificationPortal: React.FC = () => {
               <li>The affidavit was prepared outside the WALAYI platform or has not yet completed the commissioner's official seal ceremony.</li>
               <li>If this document purports to bear a WALAYI jurat, it may be fraudulent or unsealed.</li>
             </ul>
-          </div>
-
-          <div className="pt-2">
-            <button
-              type="button"
-              onClick={() => handleQuickLookup('WY-8849KPLA')}
-              className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer transition-colors shadow-xs"
-              id="btn-load-demo-record"
-            >
-              Load Authenticated Sample Instrument
-            </button>
           </div>
         </div>
       )}
