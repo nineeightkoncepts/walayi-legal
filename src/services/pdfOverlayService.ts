@@ -1,7 +1,7 @@
 import { PDFDocument, PDFPage, PDFFont, StandardFonts, rgb } from 'pdf-lib';
-import { CommissioningRequest, DocumentMarkPlacement } from '../types';
+import { CommissioningRequest, DocumentMarkPlacement, AnnexureItem } from '../types';
 import { buildCertifiedInstrumentPdf, downloadCertifiedInstrumentPdf } from './pdfService';
-import { ensureOverlayablePdfUrl } from './docConversionService';
+import { ensureOverlayablePdfUrl, convertWordBytesToPdfBytes } from './docConversionService';
 
 /**
  * Real "Fill & Sign" style finishing: takes the ACTUAL uploaded document's
@@ -207,11 +207,100 @@ export async function placeSignaturesOnOriginal(pdfDoc: PDFDocument, request: Co
   drawDigitalStamp(commissionerPage, font, fontBold, stampCx, commissionerY + boxH / 2, 26, request);
 }
 
+function guessFileExtension(fileName: string): string {
+  const idx = fileName.lastIndexOf('.');
+  return idx >= 0 ? fileName.slice(idx + 1).toLowerCase() : '';
+}
+
+/**
+ * Resolves one annexure's own uploaded file into standalone PDF bytes ready
+ * to be copied into the final instrument: a native PDF is used as-is, a
+ * Word upload is converted the same way the main document is, and an image
+ * is placed as a single full A4 page. Returns null only when the annexure
+ * has nothing usable to attach (caller skips it rather than failing the
+ * whole document).
+ */
+async function annexureToPdfBytes(item: AnnexureItem): Promise<Uint8Array | null> {
+  if (!item.fileUrl) return null;
+  const ext = guessFileExtension(item.fileName);
+  const bytes = await fetchBytes(item.fileUrl);
+
+  if (ext === 'pdf') {
+    return new Uint8Array(bytes);
+  }
+  if (ext === 'doc' || ext === 'docx') {
+    return convertWordBytesToPdfBytes(bytes);
+  }
+  if (ext === 'jpg' || ext === 'jpeg' || ext === 'png') {
+    const imgDoc = await PDFDocument.create();
+    const img = ext === 'png' ? await imgDoc.embedPng(bytes) : await imgDoc.embedJpg(bytes);
+    const pageW = 595.28; // A4 in points
+    const pageH = 841.89;
+    const margin = 40;
+    const page = imgDoc.addPage([pageW, pageH]);
+    const dims = img.scaleToFit(pageW - margin * 2, pageH - margin * 2);
+    page.drawImage(img, {
+      x: (pageW - dims.width) / 2,
+      y: (pageH - dims.height) / 2,
+      width: dims.width,
+      height: dims.height
+    });
+    return imgDoc.save();
+  }
+
+  throw new Error(`UNSUPPORTED_ANNEXURE_TYPE:${ext || 'unknown'}`);
+}
+
+/**
+ * Appends every confirmed annexure/exhibit's real uploaded file to the
+ * instrument, each preceded by a labeled divider page ("ANNEXURE A", its
+ * title, and the exhibit wording read out during the ceremony) so the
+ * relationship between the main document and its annexures stays clear in
+ * the final PDF exactly as it was during commissioning. One annexure
+ * failing to attach (an unreachable URL, an unsupported file type) is
+ * logged and skipped rather than breaking the whole download — the parties
+ * already have the main signed document either way.
+ */
+export async function appendAnnexures(pdfDoc: PDFDocument, request: CommissioningRequest): Promise<void> {
+  const annexures = (request.annexures || []).filter(a => a.fileUrl);
+  if (annexures.length === 0) return;
+
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const pageW = 595.28;
+  const pageH = 841.89;
+
+  for (const item of annexures) {
+    try {
+      const cover = pdfDoc.addPage([pageW, pageH]);
+      drawCenteredText(cover, `ANNEXURE "${item.identifier}"`, pageW / 2, pageH / 2 + 50, 26, fontBold, INK);
+      if (item.title) {
+        drawCenteredText(cover, item.title, pageW / 2, pageH / 2 + 18, 12, font, MUTED);
+      }
+      drawCenteredText(cover, item.fileName, pageW / 2, pageH / 2 - 4, 9, font, MUTED);
+      const wording = item.exhibitWording ||
+        `Referred to and marked as Exhibit "${item.identifier}" in the annexed document.`;
+      const wrapped = wording.length > 90 ? `${wording.slice(0, 87)}...` : wording;
+      drawCenteredText(cover, wrapped, pageW / 2, pageH / 2 - 34, 9, font, MUTED);
+
+      const annexBytes = await annexureToPdfBytes(item);
+      if (!annexBytes) continue;
+
+      const annexDoc = await PDFDocument.load(annexBytes, { ignoreEncryption: true });
+      const copied = await pdfDoc.copyPages(annexDoc, annexDoc.getPageIndices());
+      copied.forEach((p) => pdfDoc.addPage(p));
+    } catch (e) {
+      console.warn(`Could not append annexure "${item.identifier}" (${item.fileName}) to signed instrument:`, e);
+    }
+  }
+}
+
 /**
  * Builds the final signed instrument: the deponent's real uploaded PDF, with
  * both signatures and the commissioner's digital stamp placed on its last
- * page, plus an appended WALAYI verification page. Throws if the request
- * has no overlayable original (caller should fall back to the synthetic
+ * page, every confirmed annexure/exhibit appended after it, plus an
+ * appended WALAYI verification page. Throws if the request has no
+ * overlayable original (caller should fall back to the synthetic
  * certificate PDF in that case).
  */
 export async function buildSignedOriginalInstrument(request: CommissioningRequest): Promise<Uint8Array> {
@@ -225,6 +314,11 @@ export async function buildSignedOriginalInstrument(request: CommissioningReques
   const pdfDoc = await PDFDocument.load(originalBytes, { ignoreEncryption: true });
 
   await placeSignaturesOnOriginal(pdfDoc, request);
+
+  // Preserve the relationship between the main instrument and its
+  // annexures/exhibits by appending each one's real file, labeled, right
+  // after the main signed document (Blueprint §8).
+  await appendAnnexures(pdfDoc, request);
 
   // Append the existing verification/certificate page (QR, hash digests,
   // statutory citations) so the instrument keeps independently verifiable
