@@ -368,6 +368,8 @@ export interface CommissioningRequest {
   uploaderId?: string;
   deponentId?: string | null;
   commissionerId?: string;
+  commissionerAcceptedAt?: string;
+  commissionerDeclineReason?: string;
   uploaderFirm?: string | null;
   commissionerFirm?: string | null;
   isJudicialConflict?: boolean;

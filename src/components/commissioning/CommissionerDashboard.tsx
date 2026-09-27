@@ -32,24 +32,28 @@ import {
 import { ApiGatewayConfigModal } from '../admin/ApiGatewayConfigModal';
 
 export const CommissionerDashboard: React.FC = () => {
-  const { 
-    currentUser, 
-    requests, 
-    setActiveCommissioningId, 
+  const {
+    currentUser,
+    requests,
+    setActiveCommissioningId,
     setCurrentView,
     updateCommissioningRequest,
+    advanceCeremonyState,
     notifyUser,
     addNotification
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'PENDING' | 'PAID' | 'COMPLETED'>('ALL');
-  
+
   // Active workflow state for selected task
   const [selectedTask, setSelectedTask] = useState<CommissioningRequest | null>(null);
   const [workflowStep, setWorkflowStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [showApiConfigModal, setShowApiConfigModal] = useState(false);
   const [simulatingPayment, setSimulatingPayment] = useState(false);
+  const [showDeclineForm, setShowDeclineForm] = useState(false);
+  const [declineReason, setDeclineReason] = useState('');
+  const [decliningTaskId, setDecliningTaskId] = useState<string | null>(null);
 
   // Requests actually assigned to this commissioner — a defensive filter
   // on top of the context's own per-user Firestore query, since `requests`
@@ -122,10 +126,76 @@ export const CommissionerDashboard: React.FC = () => {
     }
   };
 
+  // A request being paid and assigned to this commissioner does not, on its
+  // own, mean the commissioner has actually agreed to perform it (WALAYI
+  // Operating Blueprint §28's status taxonomy distinguishes "Commissioner
+  // Selected" from "Commissioner Accepted"). Until this explicit action
+  // happens, the task sits here awaiting acceptance rather than silently
+  // becoming workable.
+  const isAwaitingAcceptance = (task: CommissioningRequest) =>
+    (task.paymentStatus === 'ESCROWED' || task.paymentStatus === 'RELEASED') && task.status === 'PAID';
+
+  const handleAcceptTask = (task: CommissioningRequest) => {
+    advanceCeremonyState(
+      task.id,
+      'ACCEPTED',
+      `${currentUser.fullName} accepted the commissioning request.`,
+      { commissionerAcceptedAt: new Date().toISOString() }
+    );
+    if (task.deponentUserId) {
+      notifyUser(
+        task.deponentUserId,
+        'Commissioner Accepted Your Request',
+        `${currentUser.fullName} has accepted "${task.documentTitle}" and is ready to proceed. You'll be notified once the commissioning room is ready.`,
+        'CEREMONY',
+        task.id,
+        'commissioningRequest'
+      );
+    }
+    addNotification('Request Accepted', `You accepted ${task.certificateNumber}. Proceed with the commissioning workflow.`, 'SUCCESS');
+  };
+
+  const openDeclineForm = (taskId: string) => {
+    setDecliningTaskId(taskId);
+    setDeclineReason('');
+    setShowDeclineForm(true);
+  };
+
+  const handleConfirmDecline = () => {
+    const task = myRequests.find(r => r.id === decliningTaskId);
+    if (!task) return;
+    const reason = declineReason.trim() || 'No reason provided.';
+    advanceCeremonyState(
+      task.id,
+      'REJECTED',
+      `${currentUser.fullName} declined the commissioning request: ${reason}`,
+      { commissionerDeclineReason: reason }
+    );
+    if (task.deponentUserId) {
+      notifyUser(
+        task.deponentUserId,
+        'Commissioner Declined Your Request',
+        `${currentUser.fullName} is unable to take on "${task.documentTitle}". Reason: ${reason}. Please select a different commissioner from the marketplace.`,
+        'ALERT',
+        task.id,
+        'commissioningRequest'
+      );
+    }
+    addNotification('Request Declined', `${task.certificateNumber} has been declined and the deponent notified.`, 'SYSTEM');
+    setShowDeclineForm(false);
+    setDecliningTaskId(null);
+    setDeclineReason('');
+    if (selectedTask?.id === task.id) setSelectedTask(null);
+  };
+
   // Enter the live video commissioning room
   const handleEnterCommissioningRoom = (task: CommissioningRequest) => {
     if (task.paymentStatus !== 'ESCROWED' && task.paymentStatus !== 'RELEASED') {
       alert('Statutory Rule: Payment must be completed and escrowed before initiating the video oath room.');
+      return;
+    }
+    if (isAwaitingAcceptance(task)) {
+      alert('Statutory Rule: You must accept this commissioning request before the video oath room can be initiated.');
       return;
     }
     setActiveCommissioningId(task.id);
@@ -387,6 +457,14 @@ export const CommissionerDashboard: React.FC = () => {
                         </span>
                       )}
 
+                      {/* Acceptance Status Pill */}
+                      {isAwaitingAcceptance(task) && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 animate-pulse">
+                          <AlertCircle className="w-3 h-3 text-blue-600" />
+                          AWAITING YOUR ACCEPTANCE
+                        </span>
+                      )}
+
                       {/* Annexure Pill */}
                       {hasAnnexures ? (
                         <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
@@ -432,15 +510,35 @@ export const CommissionerDashboard: React.FC = () => {
 
                   {/* Right Action Trigger */}
                   <div className="flex items-center gap-2 w-full lg:w-auto justify-end shrink-0 pt-2 lg:pt-0">
-                    <button
-                      onClick={() => handleOpenWorkflow(task, 1)}
-                      className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-2 shadow-xs transition-all cursor-pointer whitespace-nowrap"
-                      id={`btn-activate-workflow-${task.id}`}
-                    >
-                      <Sparkles className="w-4 h-4 text-blue-200" />
-                      <span>Activate Commissioning Workflow</span>
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
+                    {isAwaitingAcceptance(task) ? (
+                      <>
+                        <button
+                          onClick={() => openDeclineForm(task.id)}
+                          className="px-4 py-2.5 rounded-xl bg-white hover:bg-red-50 text-red-700 border border-red-200 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap"
+                          id={`btn-decline-task-${task.id}`}
+                        >
+                          Decline
+                        </button>
+                        <button
+                          onClick={() => handleAcceptTask(task)}
+                          className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-2 shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                          id={`btn-accept-task-${task.id}`}
+                        >
+                          <CheckCircle className="w-4 h-4 text-emerald-100" />
+                          <span>Accept Request</span>
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => handleOpenWorkflow(task, 1)}
+                        className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-2 shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                        id={`btn-activate-workflow-${task.id}`}
+                      >
+                        <Sparkles className="w-4 h-4 text-blue-200" />
+                        <span>Activate Commissioning Workflow</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -920,6 +1018,56 @@ export const CommissionerDashboard: React.FC = () => {
         isOpen={showApiConfigModal}
         onClose={() => setShowApiConfigModal(false)}
       />
+
+      {/* DECLINE REQUEST — reason required before the deponent is notified */}
+      {showDeclineForm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-fadeIn" id="decline-task-modal">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-scaleUp">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">Decline This Commissioning Request</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  The deponent will be notified immediately and asked to choose a different commissioner. This cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700" htmlFor="decline-reason-input">
+                Reason (shown to the deponent)
+              </label>
+              <textarea
+                id="decline-reason-input"
+                value={declineReason}
+                onChange={(e) => setDeclineReason(e.target.value)}
+                rows={3}
+                placeholder="e.g. Outside my jurisdiction, unavailable this week, conflict of interest…"
+                className="w-full p-3 rounded-xl border border-slate-200 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400 resize-none"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                onClick={() => { setShowDeclineForm(false); setDecliningTaskId(null); setDeclineReason(''); }}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                id="btn-cancel-decline"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDecline}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors cursor-pointer"
+                id="btn-confirm-decline"
+              >
+                Confirm Decline
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
