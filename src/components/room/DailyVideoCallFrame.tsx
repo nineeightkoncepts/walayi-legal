@@ -524,7 +524,7 @@ export const DailyVideoCallFrame: React.FC<DailyVideoCallFrameProps> = ({
               type="button"
               onClick={() => setShowConfigModal(true)}
               className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
-              title="Connect to Cloud Video Gateway"
+              title="Switch to Cloud Video"
               id="btn-switch-to-daily-cloud"
             >
               <Radio className="w-3.5 h-3.5 text-amber-400" />
@@ -549,7 +549,7 @@ export const DailyVideoCallFrame: React.FC<DailyVideoCallFrameProps> = ({
             type="button"
             onClick={() => setShowConfigModal(true)}
             className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors cursor-pointer"
-            title="Configure Video Gateway"
+            title="Video Settings"
             id="btn-open-daily-config"
           >
             <Settings className="w-3.5 h-3.5 text-slate-400" />
@@ -759,7 +759,7 @@ export const DailyVideoCallFrame: React.FC<DailyVideoCallFrameProps> = ({
                   className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-1.5 border border-slate-700 cursor-pointer"
                 >
                   <Settings className="w-3.5 h-3.5" />
-                  Enter Daily Key / Room URL
+                  Advanced Video Options
                 </button>
               </div>
             </div>
@@ -778,7 +778,7 @@ export const DailyVideoCallFrame: React.FC<DailyVideoCallFrameProps> = ({
                   <Video className="w-4 h-4 text-white" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm">Video Gateway & Daily.co Setup</h3>
+                  <h3 className="font-bold text-sm">Video Connection Settings</h3>
                   <p className="text-[11px] text-slate-400">Configure cloud video room or use built-in chamber</p>
                 </div>
               </div>

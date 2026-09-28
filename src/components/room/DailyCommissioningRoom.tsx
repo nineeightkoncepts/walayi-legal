@@ -6,7 +6,6 @@ import { SignatureCanvas } from '../common/SignatureCanvas';
 import { OfficialSeal } from '../common/OfficialSeal';
 import { AuditCertificateModal } from '../common/AuditCertificateModal';
 import { DailyVideoCallFrame } from './DailyVideoCallFrame';
-import { ApiGatewayConfigModal } from '../admin/ApiGatewayConfigModal';
 import { ApiConfigService } from '../../services/apiConfigService';
 import confetti from 'canvas-confetti';
 import { 
@@ -44,7 +43,6 @@ import {
   Settings,
   Copy,
   Check,
-  Key,
   Fingerprint,
   Scale
 } from 'lucide-react';
@@ -140,7 +138,6 @@ export const DailyCommissioningRoom: React.FC = () => {
 
   const [showAuditModal, setShowAuditModal] = useState<boolean>(false);
   const [auditModalTab, setAuditModalTab] = useState<'instrument' | 'audit'>('instrument');
-  const [showApiGatewayModal, setShowApiGatewayModal] = useState<boolean>(false);
   const [generatedJurat, setGeneratedJurat] = useState<string>('');
 
   // A mark (signature/thumbprint) that's been captured but not yet placed
@@ -1261,16 +1258,6 @@ export const DailyCommissioningRoom: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setShowApiGatewayModal(true)}
-            className="text-[11px] px-3 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 font-semibold flex items-center gap-1.5 border border-amber-300 cursor-pointer transition-colors"
-            id="btn-room-open-api-secrets"
-            title="Configure Daily.co API key or MTN MoMo gateway secrets"
-          >
-            <Key className="w-3.5 h-3.5 text-amber-600" />
-            API & Secrets
-          </button>
-
-          <button
             onClick={() => setShowAuditModal(true)}
             className="text-[11px] px-3 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold flex items-center gap-1.5 border border-blue-200 cursor-pointer transition-colors"
             id="btn-room-view-audit"
@@ -1475,14 +1462,6 @@ export const DailyCommissioningRoom: React.FC = () => {
                       <Video className="w-4 h-4 text-blue-600" />
                       Live Statutory WebRTC Feed
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowApiGatewayModal(true)}
-                      className="text-[11px] text-blue-700 hover:text-blue-900 font-bold underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <Key className="w-3 h-3 text-amber-600" />
-                      Video & Payment Gateway Settings
-                    </button>
                   </div>
                   <div className="text-[11px] text-slate-600">
                     Video feed is end-to-end encrypted for this session.
@@ -2195,14 +2174,6 @@ export const DailyCommissioningRoom: React.FC = () => {
           request={activeRequest}
           initialTab={auditModalTab}
           onClose={() => setShowAuditModal(false)}
-        />
-      )}
-
-      {/* API Gateway & Secrets Configuration Modal */}
-      {showApiGatewayModal && (
-        <ApiGatewayConfigModal
-          isOpen={showApiGatewayModal}
-          onClose={() => setShowApiGatewayModal(false)}
         />
       )}
 

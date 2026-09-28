@@ -40,6 +40,32 @@ export async function uploadConvertedPdf(requestId: string, pdfBytes: Uint8Array
 }
 
 /**
+ * Uploads a legal authority's actual verification document — a practising
+ * certificate, Commissioner for Oaths appointment warrant, judicial
+ * instrument, etc. — so an admin reviewing the admission request can open
+ * the real file rather than approving a submission backed by nothing but a
+ * typed-in document title.
+ */
+export async function uploadCredentialDocument(userId: string, file: File): Promise<UploadedDocument> {
+  const safeName = file.name.replace(/[^a-zA-Z0-9_.\-]/g, '_');
+  const storagePath = `credentialDocuments/${userId}/${Date.now()}-${safeName}`;
+  const storageRef = ref(storage, storagePath);
+  const mimeType = file.type || 'application/octet-stream';
+
+  await uploadBytes(storageRef, file, { contentType: mimeType });
+  const url = await getDownloadURL(storageRef);
+
+  return { url, mimeType };
+}
+
+/** Formats a byte count as a human-readable size string, e.g. "1.4 MB". */
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
  * Uploads a document a user has started but not yet submitted to a
  * Commissioner, keyed by a draft id rather than a commissioning request id
  * (a draft has no request yet). This is what lets "save as draft and

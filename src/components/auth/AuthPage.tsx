@@ -56,7 +56,7 @@ interface AuthPageProps {
 }
 
 export const AuthPage: React.FC<AuthPageProps> = ({ onVerifyInstead }) => {
-  const { signInUser, addNotification } = useApp();
+  const { signInUser, addNotification, setCurrentView } = useApp();
 
   const [mode, setMode] = useState<AuthMode>(() => modeFromHash());
 
@@ -316,6 +316,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onVerifyInstead }) => {
         avatarUrl: photoUrl
       });
 
+      // A brand-new Commissioner-category account has nothing to do on its
+      // dashboard yet — it needs its practising licence and Commissioner
+      // for Oaths appointment on file before it can be admitted. Route
+      // straight into that onboarding step instead of leaving it to be
+      // discovered later through Profile Settings.
+      if (isNewAccount && userRole === 'commissioner') {
+        setCurrentView('onboarding');
+      }
+
       addNotification(
         isNewAccount ? 'Account Created' : 'Sign In Successful',
         isNewAccount
@@ -417,6 +426,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onVerifyInstead }) => {
         role: mappedRole,
         avatarUrl: ''
       });
+
+      // Same reasoning as the Google sign-up path: send a brand-new
+      // Commissioner-category account straight to the onboarding step that
+      // collects its practising licence and appointment instrument, rather
+      // than leaving that discoverable only via Profile Settings.
+      if (mappedRole === 'commissioner') {
+        setCurrentView('onboarding');
+      }
 
       addNotification(
         'Account Created',

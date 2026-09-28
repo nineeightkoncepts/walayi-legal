@@ -16,7 +16,7 @@ type Step = 'confirm-email' | 'set-password' | 'done';
 // Auth user (or Firestore users/{uid} profile) exists for them until they
 // land here and complete this.
 export const CompleteInviteView: React.FC = () => {
-  const { signInUser, addNotification } = useApp();
+  const { signInUser, addNotification, setCurrentView } = useApp();
 
   const initialEmail = (() => {
     try {
@@ -136,6 +136,13 @@ export const CompleteInviteView: React.FC = () => {
       role: welcomeRole,
       avatarUrl: u?.photoURL || undefined,
     } as any);
+    // An admin-invited authority still needs its practising licence and
+    // appointment instrument on file before it can be admitted — same as a
+    // self-registered Commissioner — so send it straight into onboarding
+    // rather than leaving that step to be found later.
+    if (['commissioner', 'notary', 'judicial_officer', 'justice_of_peace'].includes(welcomeRole || '')) {
+      setCurrentView('onboarding');
+    }
     addNotification('Account Activated', `Welcome to WALAYI, ${welcomeName}. Your account is ready.`, 'SUCCESS');
     setStep('done');
   };

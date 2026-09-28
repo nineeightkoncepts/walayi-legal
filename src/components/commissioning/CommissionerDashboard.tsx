@@ -23,13 +23,11 @@ import {
   ChevronRight,
   Filter,
   Search,
-  Key,
   Calendar,
   AlertCircle,
   User,
   Stamp
 } from 'lucide-react';
-import { ApiGatewayConfigModal } from '../admin/ApiGatewayConfigModal';
 
 export const CommissionerDashboard: React.FC = () => {
   const {
@@ -49,7 +47,6 @@ export const CommissionerDashboard: React.FC = () => {
   // Active workflow state for selected task
   const [selectedTask, setSelectedTask] = useState<CommissioningRequest | null>(null);
   const [workflowStep, setWorkflowStep] = useState<1 | 2 | 3 | 4 | 5>(1);
-  const [showApiConfigModal, setShowApiConfigModal] = useState(false);
   const [simulatingPayment, setSimulatingPayment] = useState(false);
   const [showDeclineForm, setShowDeclineForm] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
@@ -278,15 +275,6 @@ export const CommissionerDashboard: React.FC = () => {
             <span>My Ledger</span>
           </button>
 
-          <button
-            onClick={() => setShowApiConfigModal(true)}
-            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
-            id="btn-configure-api-keys"
-            title="Configure video and mobile money gateway credentials"
-          >
-            <Key className="w-4 h-4 text-amber-400" />
-            <span>API & Gateway Secrets</span>
-          </button>
         </div>
       </div>
 
@@ -787,7 +775,7 @@ export const CommissionerDashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Payment Gateway Transaction Data */}
+                    {/* Payment Transaction Data */}
                     <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
                       <div className="flex items-center gap-2">
                         <Smartphone className="w-4 h-4 text-blue-600" />
@@ -798,7 +786,7 @@ export const CommissionerDashboard: React.FC = () => {
                       </div>
 
                       <div>
-                        <span className="text-slate-500">Gateway Ref: </span>
+                        <span className="text-slate-500">Payment Ref: </span>
                         <strong className="font-mono-code text-blue-700">{selectedTask.paymentReference || 'MTN-UG-9918234'}</strong>
                       </div>
 
@@ -1012,12 +1000,6 @@ export const CommissionerDashboard: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* API Configuration Modal */}
-      <ApiGatewayConfigModal
-        isOpen={showApiConfigModal}
-        onClose={() => setShowApiConfigModal(false)}
-      />
 
       {/* DECLINE REQUEST — reason required before the deponent is notified */}
       {showDeclineForm && (

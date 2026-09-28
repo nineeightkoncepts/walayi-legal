@@ -258,6 +258,21 @@ export const CredentialVerificationQueue: React.FC = () => {
                 <div className="p-3 bg-white rounded-xl border border-amber-100 font-mono-code text-[11px] text-slate-800">
                   Declared licence / reference: {selectedDoc.doc.licenseNumber || 'Not provided'}
                 </div>
+                {selectedDoc.doc.fileUrl ? (
+                  <a
+                    href={selectedDoc.doc.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Open Uploaded File ({selectedDoc.doc.fileName})
+                  </a>
+                ) : (
+                  <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-[11px] font-bold">
+                    No file was attached to this submission — do not approve without one.
+                  </div>
+                )}
               </div>
 
               {/* Statutory verification checklist */}

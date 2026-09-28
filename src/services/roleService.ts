@@ -74,6 +74,8 @@ export const canAccessView = (
       'home',
       'commissioner-dashboard', // his dashboard
       'commissioner-settings',   // his settings (NEW)
+      'onboarding',       // submit/replace practising licence & appointment instrument
+      'vault',            // manage credential documents, signature & seal
       'room',             // live commissioning room
       'documents',        // his documents
       'wallet',           // his wallet/payouts
@@ -91,6 +93,8 @@ export const canAccessView = (
     'notary': new Set([
       'home',
       'commissioner-dashboard', // notaries often have similar workflows
+      'onboarding',
+      'vault',
       'room',
       'documents',
       'wallet',
@@ -99,6 +103,8 @@ export const canAccessView = (
 
     'judicial_officer': new Set([
       'home',
+      'onboarding',
+      'vault',
       'documents',
       'wallet',
       'verify-portal',
@@ -106,6 +112,8 @@ export const canAccessView = (
 
     'justice_of_peace': new Set([
       'home',
+      'onboarding',
+      'vault',
       'documents',
       'wallet',
       'verify-portal',

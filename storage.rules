@@ -31,6 +31,21 @@ service firebase.storage {
                     && request.resource.size < 25 * 1024 * 1024;
     }
 
+    // Credential/authority verification documents (practising certificates,
+    // Commissioner for Oaths appointment warrants, judicial instruments,
+    // etc.). Read is public — mirroring commissioningDocuments — because
+    // these are professional credentials meant to be independently
+    // verifiable (like a bar admission record) and the Master Admin's
+    // review queue must be able to open the real file it is approving.
+    // Only the owning user may upload their own credential documents.
+    // Path written by src/services/documentStorageService.ts
+    match /credentialDocuments/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.size < 15 * 1024 * 1024;
+    }
+
     // Draft documents: a user's own in-progress upload, not yet submitted to
     // a Commissioner. Unlike a commissioning document, a draft is private —
     // only its owner (encoded in the path itself) may read or write it.

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { AuthorityType, LegalBasis } from '../../types';
+import { uploadCredentialDocument, formatFileSize } from '../../services/documentStorageService';
 import { 
   Scale, 
   ShieldCheck, 
@@ -41,9 +42,11 @@ export const AuthorityOnboardingModal: React.FC = () => {
   const [judicialDesignation, setJudicialDesignation] = useState<string>('Senior Magistrate Grade One');
   const [jpGazetteReference, setJpGazetteReference] = useState<string>('Uganda Gazette Vol. CXVIII No. 24');
 
-  // Uploaded docs
-  const [uploadedPC, setUploadedPC] = useState<string>('Practising_Certificate_2026_LawCouncil.pdf');
-  const [uploadedWarrant, setUploadedWarrant] = useState<string>('Chief_Justice_CFO_Commission_Warrant.pdf');
+  // Uploaded docs — real files the user actually selected, not placeholder
+  // text. Nothing here counts as "uploaded" until it is genuinely picked
+  // and its bytes are sent to storage on submit.
+  const [pcFile, setPcFile] = useState<File | null>(null);
+  const [warrantFile, setWarrantFile] = useState<File | null>(null);
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -60,29 +63,52 @@ export const AuthorityOnboardingModal: React.FC = () => {
 
     // Submit credentials to private vault
     if (selectedAuthority === 'commissioner_for_oaths' || selectedAuthority === 'notary_public') {
-      submitCredentialDocument(currentUser.id, {
-        name: `2026 Practising Certificate (${fullName})`,
-        type: 'practising_certificate',
-        fileName: uploadedPC,
-        fileSize: '1.4 MB',
-        validFrom: '2026-01-01',
-        validUntil: '2026-12-31',
-        issuingAuthority: 'Uganda Law Council / High Court of Uganda',
-        verificationReference: `ULC-PC-2026-${Math.floor(1000 + Math.random() * 9000)}`
-      });
+      // A real file must actually be selected for both required proofs —
+      // no submission is accepted on the strength of a typed-in name alone,
+      // otherwise an admin ends up approving a document that was never
+      // actually provided.
+      if (!pcFile || !warrantFile) {
+        setSubmitError('Please upload both your practising certificate and your appointment/commission warrant before submitting.');
+        setIsSubmitting(false);
+        return;
+      }
 
-      submitCredentialDocument(currentUser.id, {
-        name: selectedAuthority === 'commissioner_for_oaths' 
-          ? 'Chief Justice Commissioner for Oaths Appointment' 
-          : 'High Court Notary Public Roll Warrant',
-        type: selectedAuthority === 'commissioner_for_oaths' ? 'chief_justice_commission' : 'notarial_appointment',
-        fileName: uploadedWarrant,
-        fileSize: '2.3 MB',
-        validFrom: '2024-01-01',
-        validUntil: '2028-12-31',
-        issuingAuthority: 'Office of the Chief Justice of Uganda',
-        verificationReference: licenceNumber
-      });
+      try {
+        const [pcUpload, warrantUpload] = await Promise.all([
+          uploadCredentialDocument(currentUser.id, pcFile),
+          uploadCredentialDocument(currentUser.id, warrantFile)
+        ]);
+
+        submitCredentialDocument(currentUser.id, {
+          name: `2026 Practising Certificate (${fullName})`,
+          type: 'practising_certificate',
+          fileName: pcFile.name,
+          fileSize: formatFileSize(pcFile.size),
+          fileUrl: pcUpload.url,
+          validFrom: '2026-01-01',
+          validUntil: '2026-12-31',
+          issuingAuthority: 'Uganda Law Council / High Court of Uganda',
+          verificationReference: `ULC-PC-2026-${Math.floor(1000 + Math.random() * 9000)}`
+        });
+
+        submitCredentialDocument(currentUser.id, {
+          name: selectedAuthority === 'commissioner_for_oaths'
+            ? 'Chief Justice Commissioner for Oaths Appointment'
+            : 'High Court Notary Public Roll Warrant',
+          type: selectedAuthority === 'commissioner_for_oaths' ? 'chief_justice_commission' : 'notarial_appointment',
+          fileName: warrantFile.name,
+          fileSize: formatFileSize(warrantFile.size),
+          fileUrl: warrantUpload.url,
+          validFrom: '2024-01-01',
+          validUntil: '2028-12-31',
+          issuingAuthority: 'Office of the Chief Justice of Uganda',
+          verificationReference: licenceNumber
+        });
+      } catch (uploadErr: any) {
+        setSubmitError(`Could not upload your documents: ${uploadErr?.message || 'unknown error'}. Please try again.`);
+        setIsSubmitting(false);
+        return;
+      }
     } else if (selectedAuthority === 'judicial_officer') {
       submitCredentialDocument(currentUser.id, {
         name: `Judicial Instrument of Appointment (${judicialDesignation})`,
@@ -352,28 +378,60 @@ export const AuthorityOnboardingModal: React.FC = () => {
                     <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                       Current Year Practising Certificate (2026)
                     </label>
-                    <div className="p-3 rounded-xl bg-white border border-dashed border-slate-300 flex items-center justify-between text-xs">
+                    <label
+                      htmlFor="onboard-input-pc-file"
+                      className="p-3 rounded-xl bg-white border border-dashed border-slate-300 flex items-center justify-between text-xs cursor-pointer hover:border-blue-400 transition-colors"
+                    >
                       <div className="flex items-center gap-2 truncate">
                         <FileText className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                        <span className="truncate text-slate-800 font-medium">{uploadedPC}</span>
+                        <span className="truncate text-slate-800 font-medium">
+                          {pcFile ? pcFile.name : 'Click to select PDF/JPG/PNG file…'}
+                        </span>
                       </div>
-                      <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">Uploaded</span>
-                    </div>
+                      {pcFile ? (
+                        <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded shrink-0">Selected</span>
+                      ) : (
+                        <Upload className="w-4 h-4 text-slate-400 shrink-0" />
+                      )}
+                    </label>
+                    <input
+                      id="onboard-input-pc-file"
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      className="hidden"
+                      onChange={(e) => setPcFile(e.target.files?.[0] || null)}
+                    />
                   </div>
 
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                      {selectedAuthority === 'commissioner_for_oaths' 
-                        ? 'Chief Justice Commission Warrant (Cap. 5)' 
+                      {selectedAuthority === 'commissioner_for_oaths'
+                        ? 'Chief Justice Commission Warrant (Cap. 5)'
                         : 'Notary Public Roll Enrolment Warrant'}
                     </label>
-                    <div className="p-3 rounded-xl bg-white border border-dashed border-slate-300 flex items-center justify-between text-xs">
+                    <label
+                      htmlFor="onboard-input-warrant-file"
+                      className="p-3 rounded-xl bg-white border border-dashed border-slate-300 flex items-center justify-between text-xs cursor-pointer hover:border-blue-400 transition-colors"
+                    >
                       <div className="flex items-center gap-2 truncate">
                         <Award className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                        <span className="truncate text-slate-800 font-medium">{uploadedWarrant}</span>
+                        <span className="truncate text-slate-800 font-medium">
+                          {warrantFile ? warrantFile.name : 'Click to select PDF/JPG/PNG file…'}
+                        </span>
                       </div>
-                      <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">Uploaded</span>
-                    </div>
+                      {warrantFile ? (
+                        <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded shrink-0">Selected</span>
+                      ) : (
+                        <Upload className="w-4 h-4 text-slate-400 shrink-0" />
+                      )}
+                    </label>
+                    <input
+                      id="onboard-input-warrant-file"
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      className="hidden"
+                      onChange={(e) => setWarrantFile(e.target.files?.[0] || null)}
+                    />
                   </div>
                 </div>
 
@@ -482,7 +540,7 @@ export const AuthorityOnboardingModal: React.FC = () => {
             <div className="flex justify-between">
               <span className="text-slate-500">Current Status:</span>
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                UNDER REVIEW
+                PENDING VERIFICATION
               </span>
             </div>
             <div className="flex justify-between">
@@ -501,12 +559,12 @@ export const AuthorityOnboardingModal: React.FC = () => {
               View Credential Vault
             </button>
             <button
-              onClick={() => setCurrentView('admin')}
+              onClick={() => setCurrentView('commissioner-dashboard')}
               className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
-              id="btn-onboard-go-admin"
+              id="btn-onboard-go-dashboard"
             >
               <Scale className="w-4 h-4" />
-              Switch to Super Admin Review Queue
+              Go to My Dashboard
             </button>
           </div>
 

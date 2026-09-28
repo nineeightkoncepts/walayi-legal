@@ -98,6 +98,7 @@ export interface CredentialDocument {
   authorityType?: AuthorityType;
   fileName: string;
   fileSize: string;
+  fileUrl?: string;
   uploadedAt: string;
   validFrom: string;
   validUntil: string;

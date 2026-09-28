@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { CredentialDocument, AuthorityType } from '../../types';
 import { SignatureVaultStudio } from './SignatureVaultStudio';
 import { SealStudio } from './SealStudio';
+import { uploadCredentialDocument, formatFileSize } from '../../services/documentStorageService';
 import { 
   Lock, 
   ShieldCheck, 
@@ -33,22 +34,45 @@ export const CredentialVaultView: React.FC = () => {
   const [docName, setDocName] = useState('2027 Practising Certificate Renewal');
   const [docType, setDocType] = useState<CredentialDocument['type']>('practising_certificate');
   const [validUntil, setValidUntil] = useState('2027-12-31');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isSubmittingUpload, setIsSubmittingUpload] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const myDocs = credentialDocs[currentUser.id] || [];
 
-  const handleUploadNew = (e: React.FormEvent) => {
+  const handleUploadNew = async (e: React.FormEvent) => {
     e.preventDefault();
-    submitCredentialDocument(currentUser.id, {
-      name: docName,
-      type: docType,
-      fileName: `${docName.replace(/\s+/g, '_')}.pdf`,
-      fileSize: '1.6 MB',
-      validFrom: new Date().toISOString().split('T')[0],
-      validUntil: validUntil,
-      issuingAuthority: 'Uganda Law Council / High Court of Uganda',
-      verificationReference: `ULC-REN-${Date.now().toString().slice(-5)}`
-    });
-    setIsUploading(false);
+    setUploadError(null);
+
+    // A document title alone proves nothing — require the actual file
+    // before this is queued for Master Admin review, otherwise an admin
+    // ends up approving a renewal that was never really provided.
+    if (!selectedFile) {
+      setUploadError('Please select the actual certificate/warrant file before submitting.');
+      return;
+    }
+
+    setIsSubmittingUpload(true);
+    try {
+      const uploaded = await uploadCredentialDocument(currentUser.id, selectedFile);
+      submitCredentialDocument(currentUser.id, {
+        name: docName,
+        type: docType,
+        fileName: selectedFile.name,
+        fileSize: formatFileSize(selectedFile.size),
+        fileUrl: uploaded.url,
+        validFrom: new Date().toISOString().split('T')[0],
+        validUntil: validUntil,
+        issuingAuthority: 'Uganda Law Council / High Court of Uganda',
+        verificationReference: `ULC-REN-${Date.now().toString().slice(-5)}`
+      });
+      setIsUploading(false);
+      setSelectedFile(null);
+    } catch (err: any) {
+      setUploadError(`Could not upload this document: ${err?.message || 'unknown error'}. Please try again.`);
+    } finally {
+      setIsSubmittingUpload(false);
+    }
   };
 
   return (
@@ -195,6 +219,40 @@ export const CredentialVaultView: React.FC = () => {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Document File</label>
+                <label
+                  htmlFor="vault-input-doc-file"
+                  className="p-3 rounded-xl bg-white border border-dashed border-slate-300 flex items-center justify-between text-xs cursor-pointer hover:border-blue-400 transition-colors"
+                >
+                  <div className="flex items-center gap-2 truncate">
+                    <FileText className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                    <span className="truncate text-slate-800 font-medium">
+                      {selectedFile ? selectedFile.name : 'Click to select PDF/JPG/PNG file…'}
+                    </span>
+                  </div>
+                  {selectedFile ? (
+                    <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded shrink-0">Selected</span>
+                  ) : (
+                    <Upload className="w-4 h-4 text-slate-400 shrink-0" />
+                  )}
+                </label>
+                <input
+                  id="vault-input-doc-file"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  className="hidden"
+                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                />
+              </div>
+
+              {uploadError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{uploadError}</span>
+                </div>
+              )}
+
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -205,10 +263,11 @@ export const CredentialVaultView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs cursor-pointer"
+                  disabled={isSubmittingUpload}
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                   id="btn-confirm-vault-upload"
                 >
-                  Submit to Master Admin Review
+                  {isSubmittingUpload ? 'Uploading…' : 'Submit to Master Admin Review'}
                 </button>
               </div>
             </form>
@@ -292,6 +351,16 @@ export const CredentialVaultView: React.FC = () => {
                           </div>
                           <span className="text-[10px] text-slate-500 font-normal font-mono-code block mt-0.5">
                             {doc.fileName} ({doc.fileSize})
+                            {doc.fileUrl && (
+                              <a
+                                href={doc.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="ml-1.5 text-blue-600 hover:text-blue-800 font-bold inline-flex items-center gap-0.5"
+                              >
+                                View <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            )}
                           </span>
                         </td>
                         <td className="px-4 py-3 font-mono-code text-[11px] capitalize">
