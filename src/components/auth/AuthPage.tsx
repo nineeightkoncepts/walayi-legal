@@ -948,6 +948,29 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onVerifyInstead }) => {
               Have a certificate to verify instead? Use the public verification portal
             </button>
           </div>
+
+          {/* Legal disclosures — open in a new tab so a half-filled form isn't lost */}
+          <div className="mt-3 flex items-center justify-center gap-2 text-[11px] text-slate-500">
+            <a
+              href="#/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold hover:text-slate-800 hover:underline"
+              id="link-auth-privacy-notice"
+            >
+              Privacy Notice
+            </a>
+            <span className="text-slate-300">•</span>
+            <a
+              href="#/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold hover:text-slate-800 hover:underline"
+              id="link-auth-terms-conditions"
+            >
+              Terms and Conditions
+            </a>
+          </div>
         </div>
       </div>
     </div>

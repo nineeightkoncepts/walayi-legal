@@ -204,6 +204,14 @@ function MainAppShell() {
 
       if (isAuthRoute) {
         setCurrentView('auth');
+        return;
+      }
+
+      // Public legal disclosures — linkable and readable without an account.
+      if (hash.startsWith('#/privacy') || hash.startsWith('#privacy')) {
+        setCurrentView('privacy');
+      } else if (hash.startsWith('#/terms') || hash.startsWith('#terms')) {
+        setCurrentView('terms');
       }
     };
 
@@ -211,6 +219,21 @@ function MainAppShell() {
     window.addEventListener('hashchange', checkRoute);
     return () => window.removeEventListener('hashchange', checkRoute);
   }, [setCurrentView]);
+
+  // Keep the address bar in step with the legal pages, so the footer links
+  // produce a shareable URL and leaving the page (Back, sign-in, navbar)
+  // doesn't strand a stale #/privacy that a refresh would bounce back to.
+  React.useEffect(() => {
+    const hash = window.location.hash.toLowerCase();
+    const isLegalHash = /^#\/?(privacy|terms)/.test(hash);
+    if (currentView === 'privacy' || currentView === 'terms') {
+      if (!hash.startsWith(`#/${currentView}`)) {
+        history.replaceState(null, '', `${window.location.pathname}${window.location.search}#/${currentView}`);
+      }
+    } else if (isLegalHash) {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  }, [currentView]);
 
   // Still waiting on Firebase's first auth callback — hold here briefly so a
   // returning, already-signed-in user never sees the sign-in page flash by.
@@ -229,14 +252,16 @@ function MainAppShell() {
     );
   }
 
-  // The public certificate verification portal is the one feature reachable
-  // without an account (e.g. a court checking a certificate from a link).
-  const isPublicVerifyRoute =
-    currentView === 'verify' || currentView === 'verify-portal' || currentView === 'verification';
+  // The public certificate verification portal (e.g. a court checking a
+  // certificate from a link) and the Privacy Notice / Terms and Conditions
+  // are the only things reachable without an account.
+  const isPublicRoute =
+    currentView === 'verify' || currentView === 'verify-portal' || currentView === 'verification' ||
+    currentView === 'privacy' || currentView === 'terms';
 
   // Every other feature requires signing in first — this is the very first
   // thing an unauthenticated visitor sees.
-  if (!isSignedIn && !isPublicVerifyRoute) {
+  if (!isSignedIn && !isPublicRoute) {
     return (
       <>
         <AuthPage
